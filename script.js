@@ -18,43 +18,32 @@ function normalizeId(id) {
 }
 
 /* =========================
-   STATUS MAPPING
-========================= */
-function mapStatus(status) {
-    status = String(status || "").toLowerCase();
-
-    if (status === "booked") return "sold";      // RED
-    if (status === "plotting") return "booked";  // YELLOW
-    if (status === "agent") return "agent";      // GREEN
-
-    return "available";
-}
-
-/* =========================
-   LOAD DATA (SAFE)
+   LOAD DATA (FIXED)
 ========================= */
 async function loadData() {
     try {
-        const res = await fetch(`${G_SCRIPT_URL}?t=${Date.now()}`);
-        const text = await res.text();
-
-        let raw;
-        try {
-            raw = JSON.parse(text);
-        } catch {
-            console.error("❌ JSON ERROR:", text);
-            raw = [];
-        }
+        const res = await fetch(`${G_SCRIPT_URL}?cmd=read&t=${Date.now()}`);
+        const raw = await res.json();
 
         const expanded = [];
 
         raw.forEach(row => {
-            if (!row || !row.boothid) return;
+            if (!row.boothid) return;
 
-            String(row.boothid).split(",").forEach(id => {
+            const booths = String(row.boothid).split(",");
+
+            booths.forEach(id => {
+
+                let status = (row.status || "available").toLowerCase();
+
+                /* 🔥 STATUS MAPPING FIX */
+                if (status === "booked") status = "sold";       // booked → sold
+                else if (status === "plotting") status = "booked"; // plotting → booked
+                else if (status === "agent") status = "agent";
+
                 expanded.push({
                     boothid: id.trim(),
-                    status: mapStatus(row.status),
+                    status: status,
                     exhibitor: (row.exhibitor || "").trim()
                 });
             });
@@ -62,44 +51,34 @@ async function loadData() {
 
         allData = expanded;
 
-        console.log("✅ DATA LOADED:", allData);
+        renderFloor();
 
-    } catch (err) {
-        console.error("❌ FETCH ERROR:", err);
+    } catch (e) {
+        console.error("Load error:", e);
+        renderFloor();
     }
-
-    renderFloor(); // ALWAYS render
 }
 
 /* =========================
-   HALL CONFIG
+   HALL CONFIG (UNCHANGED)
 ========================= */
 const hallConfig = [
-  {name:"Hall 5", start:5001, end:5078},
-  {name:"Hall 6", start:6001, end:6189},
-  {name:"Hall 7", start:7001, end:7196},
-  {name:"Hall 8", start:8001, end:8181},
-  {name:"Hall 9", start:9001, end:9191},
-  {name:"Hall 10", start:1001, end:1151}
+  {name:"Hall 5", start:5001, end:"5078-A"},
+  {name:"Hall 6", start:6001, end:"6189-A"},
+  {name:"Hall 7", start:7001, end:"7196-A"},
+  {name:"Hall 8", start:8001, end:"8181-A"},
+  {name:"Hall 9", start:9001, end:"9191-A"},
+  {name:"Hall 10", start:1001, end:"1151-A"},
+  {name:"Ambulance", start:"A", end:"Z"}
 ];
 
 /* =========================
-   GET VARIANTS (5061-A)
-========================= */
-function getVariants(baseId) {
-    return allData.filter(x =>
-        normalizeId(x.boothid).startsWith(normalizeId(baseId) + "-")
-    );
-}
-
-/* =========================
-   RENDER FLOOR
+   RENDER FLOOR (SAFE)
 ========================= */
 function renderFloor() {
     floor.innerHTML = "";
 
     hallConfig.forEach(hall => {
-
         const hallDiv = document.createElement("div");
         hallDiv.className = "hall";
 
@@ -110,17 +89,16 @@ function renderFloor() {
         const grid = document.createElement("div");
         grid.className = "grid";
 
-        for (let i = hall.start; i <= hall.end; i++) {
+        if (hall.name === "Ambulance") {
+            for (let i = 65; i <= 90; i++) {
+                grid.appendChild(createBooth(String.fromCharCode(i)));
+            }
+        } else {
+            let startNum = parseInt(hall.start);
+            let endNum = parseInt(hall.end);
 
-            const baseId = String(i);
-            const variants = getVariants(baseId);
-
-            if (variants.length > 0) {
-                variants.forEach(v => {
-                    grid.appendChild(createBooth(v.boothid));
-                });
-            } else {
-                grid.appendChild(createBooth(baseId));
+            for (let i = startNum; i <= endNum; i++) {
+                grid.appendChild(createBooth(String(i)));
             }
         }
 
@@ -130,30 +108,23 @@ function renderFloor() {
 }
 
 /* =========================
-   CREATE BOOTH (SMART MATCH FIX)
+   CREATE BOOTH
 ========================= */
 function createBooth(id) {
     const b = document.createElement("div");
+
     b.className = "booth available";
     b.innerText = id;
     b.dataset.id = id;
+    b.dataset.name = "";
+    b.dataset.tooltip = "Available";
 
-    // 🔥 KEY FIX HERE
-    const d = allData.find(x => {
-        const dataId = normalizeId(x.boothid);
-        const boothId = normalizeId(id);
-
-        return (
-            dataId === boothId ||
-            dataId.startsWith(boothId + "-") ||
-            boothId.startsWith(dataId + "-")
-        );
-    });
+    const d = allData.find(x => normalizeId(x.boothid) === normalizeId(id));
 
     if (d) {
         b.className = "booth " + d.status;
-        b.dataset.tooltip = d.exhibitor || d.status;
         b.dataset.name = d.exhibitor;
+        b.dataset.tooltip = d.exhibitor || d.status;
     }
 
     b.onclick = (e) => {
@@ -163,7 +134,7 @@ function createBooth(id) {
 
         panelContent.innerHTML = `
             <b>Booth:</b> ${id}<br>
-            <b>Status:</b> ${b.className.replace("booth ","")}<br>
+            <b>Status:</b> ${b.className.replace('booth ', '')}<br>
             <b>Exhibitor:</b> ${b.dataset.name || "-"}
         `;
     };
@@ -177,42 +148,41 @@ function createBooth(id) {
 searchBox.addEventListener("input", () => {
     const val = searchBox.value.toLowerCase();
 
-    const list = allData.filter(x =>
-        normalizeId(x.boothid).includes(val) ||
+    const result = allData.filter(x =>
+        normalizeId(x.boothid).includes(normalizeId(val)) ||
         (x.exhibitor || "").toLowerCase().includes(val)
     );
 
+    showSuggestions(result);
+});
+
+function showSuggestions(list) {
     suggestions.innerHTML = "";
-    suggestions.style.display = list.length ? "block" : "none";
+    if (list.length === 0) return suggestions.style.display = "none";
+
+    suggestions.style.display = "block";
 
     list.forEach(x => {
         const div = document.createElement("div");
         div.className = "suggestionItem";
         div.innerText = `${x.boothid} - ${x.exhibitor}`;
 
-        div.onclick = (e) => {
-            e.stopPropagation();
-
+        div.onclick = () => {
             const el = document.querySelector(`[data-id='${x.boothid}']`);
-
             if (el) {
                 el.scrollIntoView({ behavior: "smooth", block: "center" });
 
                 el.classList.add("highlight");
-
-                setTimeout(() => {
-                    el.classList.remove("highlight");
-                }, 4000);
+                setTimeout(() => el.classList.remove("highlight"), 4000);
 
                 el.click();
             }
-
             suggestions.style.display = "none";
         };
 
         suggestions.appendChild(div);
     });
-});
+}
 
 /* =========================
    ZOOM
@@ -245,16 +215,11 @@ container.addEventListener("mouseleave", () => isDown = false);
 
 container.addEventListener("mousemove", (e) => {
     if (!isDown) return;
-
-    e.preventDefault();
-
     container.scrollLeft = scrollLeft - (e.pageX - startX);
     container.scrollTop = scrollTop - (e.pageY - startY);
 });
 
-/* =========================
-   GLOBAL CLICK
-========================= */
+/* CLOSE PANEL */
 document.addEventListener("click", () => {
     panel.classList.add("hidden");
     suggestions.style.display = "none";
