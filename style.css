@@ -2,9 +2,9 @@ body {
     margin: 0;
     font-family: 'Segoe UI', Arial, sans-serif;
     background: #f1f5f9;
+    overflow: hidden;
 }
 
-/* HEADER */
 header {
     background: white;
     padding: 20px 40px;
@@ -17,40 +17,42 @@ header {
     padding: 20px 40px;
 }
 
-/* SEARCH */
+/* =========================
+   SEARCH (ALWAYS ON TOP)
+========================= */
 .searchWrapper {
     position: relative;
     margin-bottom: 20px;
-    z-index: 9999; /* 🔥 ALWAYS ON TOP */
+    z-index: 9999;
 }
 
 #searchBox {
     width: 100%;
-    padding: 14px;
-    border-radius: 8px;
-    border: 1px solid #ccc;
-    font-size: 15px;
+    padding: 15px;
+    font-size: 16px;
+    border-radius: 10px;
+    border: 1px solid #cbd5e1;
     outline: none;
+    box-sizing: border-box;
 }
 
 #searchBox:focus {
     border-color: #3b82f6;
-    box-shadow: 0 0 0 2px rgba(59,130,246,0.2);
+    box-shadow: 0 0 0 3px rgba(59,130,246,0.2);
 }
 
-/* DROPDOWN */
 #suggestions {
     position: absolute;
     width: 100%;
     background: white;
     border-radius: 10px;
-    box-shadow: 0 15px 30px rgba(0,0,0,0.25);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
     display: none;
     max-height: 300px;
     overflow-y: auto;
     top: 100%;
-    margin-top: 6px;
-    z-index: 99999; /* 🔥 ABOVE EVERYTHING */
+    margin-top: 5px;
+    z-index: 9999;
 }
 
 .suggestionItem {
@@ -65,12 +67,15 @@ header {
     color: #1d4ed8;
 }
 
-/* LEGEND */
+/* =========================
+   LEGEND
+========================= */
 #legend {
     display: flex;
     gap: 20px;
-    margin-bottom: 10px;
-    font-weight: 600;
+    margin-bottom: 15px;
+    font-weight: bold;
+    font-size: 14px;
 }
 
 .dot {
@@ -78,40 +83,55 @@ header {
     height: 14px;
     display: inline-block;
     border-radius: 4px;
-    margin-right: 5px;
+    margin-right: 6px;
 }
 
-/* COLORS */
-.available { background: #3b82f6; } /* Blue */
-.sold { background: #ef4444; } /* Red */
-.booked { background: #eab308; } /* Yellow */
-.agent { background: #22c55e; } /* Green */
+.available { background: #3b82f6; }
+.sold { background: #ef4444; }
+.booked { background: #eab308; }
+.agent { background: #22c55e; }
 
-/* MENU */
+/* =========================
+   MENU BUTTONS (MODERN)
+========================= */
 #menu {
-    margin-bottom: 10px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
 button {
-    padding: 8px 14px;
-    border-radius: 6px;
-    border: 1px solid #ccc;
+    padding: 10px 16px;
     cursor: pointer;
-    background: white;
+    background: linear-gradient(135deg, #1e293b, #334155);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
     transition: 0.2s;
 }
 
 button:hover {
-    background: #f1f5f9;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.2);
 }
 
-/* FLOOR */
+/* =========================
+   FLOOR CONTAINER (DRAG ENABLE)
+========================= */
 #floorContainer {
     height: 75vh;
     overflow: auto;
-    background: white;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
     cursor: grab;
-    border-radius: 10px;
+    position: relative;
+    scroll-behavior: smooth;
+
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 #floorContainer:active {
@@ -120,47 +140,69 @@ button:hover {
 
 #floor {
     display: flex;
-    gap: 80px;
-    padding: 120px;
+    gap: 100px;
+    padding: 200px;
     transform-origin: 0 0;
+    width: max-content;
 }
 
-/* HALL */
+/* =========================
+   HALL
+========================= */
 .hall {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 15px;
 }
 
-.hall h3 {
+.hall h2 {
     margin: 0;
-    font-size: 18px;
+    font-size: 20px;
+    color: #1e293b;
+    background: #f8fafc;
+    padding: 8px 12px;
+    border-radius: 6px;
+    width: max-content;
+    cursor: pointer;
 }
 
-/* GRID */
+.hall h2:hover {
+    background: #e2e8f0;
+}
+
+/* =========================
+   GRID + BOOTH
+========================= */
 .grid {
     display: grid;
     grid-template-columns: repeat(8, 80px);
     gap: 10px;
 }
 
-/* BOOTH */
 .booth {
     width: 80px;
     height: 80px;
+    border-radius: 10px;
     display: flex;
-    align-items: center;
     justify-content: center;
+    align-items: center;
     color: white;
-    font-size: 11px;
-    border-radius: 6px;
     cursor: pointer;
+    font-size: 12px;
+    font-weight: bold;
     position: relative;
-    z-index: 1; /* 🔥 BELOW SEARCH */
+    transition: 0.2s;
+
     user-select: none;
 }
 
-/* TOOLTIP */
+.booth:hover {
+    filter: brightness(1.1);
+}
+
+/* =========================
+   TOOLTIP
+========================= */
 .booth:hover::after {
     content: attr(data-tooltip);
     position: absolute;
@@ -169,28 +211,43 @@ button:hover {
     transform: translateX(-50%);
     background: #1e293b;
     color: white;
-    padding: 6px 10px;
+    padding: 6px 12px;
     border-radius: 6px;
-    font-size: 11px;
+    font-size: 12px;
     white-space: nowrap;
+    z-index: 100;
 }
 
-/* HIGHLIGHT */
+/* =========================
+   HIGHLIGHT + BLINK (5s)
+========================= */
 .highlight {
     outline: 4px solid #facc15;
     outline-offset: 2px;
+    z-index: 999;
+    animation: blinkHighlight 1s ease-in-out 5;
 }
 
-/* SIDE PANEL */
+@keyframes blinkHighlight {
+    0%   { transform: scale(1); box-shadow: 0 0 0 rgba(250,204,21,0); }
+    50%  { transform: scale(1.15); box-shadow: 0 0 25px rgba(250,204,21,0.9); }
+    100% { transform: scale(1); box-shadow: 0 0 0 rgba(250,204,21,0); }
+}
+
+/* =========================
+   SIDE PANEL
+========================= */
 #sidePanel {
     position: fixed;
     right: 20px;
     top: 120px;
+    width: 280px;
     background: white;
-    padding: 20px;
-    border-radius: 12px;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+    padding: 25px;
+    border-radius: 16px;
+    box-shadow: 0 20px 25px rgba(0,0,0,0.1);
     z-index: 2000;
+    border: 1px solid #f1f5f9;
 }
 
 .hidden {
@@ -198,6 +255,7 @@ button:hover {
 }
 
 #panelContent b {
-    font-size: 12px;
     color: #64748b;
+    font-size: 12px;
+    text-transform: uppercase;
 }
