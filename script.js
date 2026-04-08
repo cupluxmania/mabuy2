@@ -40,7 +40,7 @@ async function loadData() {
             let helper = (row.helper || "").toLowerCase();
             let exhibitor = (row.exhibitor || "").toLowerCase();
 
-            // 🔥 AGENT DETECTION
+            // ✅ AGENT DETECTION
             let isAgent =
                 rawStatus.includes("agent") ||
                 helper.includes("agent") ||
@@ -171,8 +171,14 @@ searchBox.addEventListener("input", () => {
             if (el) {
                 el.scrollIntoView({ behavior: "smooth", block: "center" });
 
+                // 🔥 HIGHLIGHT + BLINK
                 el.classList.add("highlight");
-                setTimeout(() => el.classList.remove("highlight"), 4000);
+                el.classList.add("blink");
+
+                setTimeout(() => {
+                    el.classList.remove("highlight");
+                    el.classList.remove("blink");
+                }, 5000);
 
                 el.click();
             }
@@ -208,12 +214,13 @@ document.getElementById("zoomIn").onclick = () => {
     zoomLevel += 0.1;
     floor.style.transform = `scale(${zoomLevel})`;
 };
+
 document.getElementById("zoomOut").onclick = () => {
     zoomLevel = Math.max(0.3, zoomLevel - 0.1);
     floor.style.transform = `scale(${zoomLevel})`;
 };
 
-/* CLOSE */
+/* CLOSE PANEL */
 document.addEventListener("click", () => {
     panel.classList.add("hidden");
     suggestions.style.display = "none";
