@@ -10,19 +10,25 @@ const panelContent = document.getElementById("panelContent");
 let allData = [];
 let zoomLevel = 1;
 
-/* NORMALIZE */
+/* =========================
+   NORMALIZE
+========================= */
 function normalizeId(id) {
     return String(id).replace(/\s+/g, "").toLowerCase();
 }
 
-/* GET VARIANTS */
+/* =========================
+   GET VARIANTS (-A/-B)
+========================= */
 function getVariants(baseId) {
     return allData.filter(x =>
         normalizeId(x.boothid).startsWith(normalizeId(baseId) + "-")
     );
 }
 
-/* LOAD DATA */
+/* =========================
+   LOAD DATA
+========================= */
 async function loadData() {
     const res = await fetch(`${G_SCRIPT_URL}?cmd=read&t=${Date.now()}`);
     const raw = await res.json();
@@ -40,7 +46,6 @@ async function loadData() {
             let helper = (row.helper || "").toLowerCase();
             let exhibitor = (row.exhibitor || "").toLowerCase();
 
-            // ✅ AGENT DETECTION
             let isAgent =
                 rawStatus.includes("agent") ||
                 helper.includes("agent") ||
@@ -61,11 +66,12 @@ async function loadData() {
     });
 
     allData = expanded;
-
     renderFloor();
 }
 
-/* HALL CONFIG */
+/* =========================
+   HALL CONFIG
+========================= */
 const hallConfig = [
   {name:"Hall 5", start:5001, end:5078},
   {name:"Hall 6", start:6001, end:6189},
@@ -76,7 +82,9 @@ const hallConfig = [
   {name:"Ambulance", start:"A", end:"Z"}
 ];
 
-/* RENDER */
+/* =========================
+   RENDER FLOOR
+========================= */
 function renderFloor() {
     floor.innerHTML = "";
 
@@ -85,9 +93,9 @@ function renderFloor() {
         const hallDiv = document.createElement("div");
         hallDiv.className = "hall";
 
-        const title = document.createElement("h3");
-        title.innerText = hall.name;
-        hallDiv.appendChild(title);
+        const h2 = document.createElement("h2");
+        h2.innerText = hall.name;
+        hallDiv.appendChild(h2);
 
         const grid = document.createElement("div");
         grid.className = "grid";
@@ -115,7 +123,26 @@ function renderFloor() {
     });
 }
 
-/* CREATE BOOTH */
+/* =========================
+   CENTER VIEW (🔥 NEW)
+========================= */
+function centerToElement(el) {
+    const rect = el.getBoundingClientRect();
+    const parentRect = container.getBoundingClientRect();
+
+    const offsetX = rect.left - parentRect.left;
+    const offsetY = rect.top - parentRect.top;
+
+    container.scrollTo({
+        left: container.scrollLeft + offsetX - (parentRect.width / 2) + (rect.width / 2),
+        top: container.scrollTop + offsetY - (parentRect.height / 2) + (rect.height / 2),
+        behavior: "smooth"
+    });
+}
+
+/* =========================
+   CREATE BOOTH
+========================= */
 function createBooth(id) {
 
     const b = document.createElement("div");
@@ -136,6 +163,14 @@ function createBooth(id) {
     b.onclick = (e) => {
         e.stopPropagation();
 
+        centerToElement(b); // 🔥 AUTO CENTER
+
+        b.classList.add("highlight");
+
+        setTimeout(() => {
+            b.classList.remove("highlight");
+        }, 5000);
+
         panel.classList.remove("hidden");
         panelContent.innerHTML = `
             <b>Booth:</b> ${id}<br>
@@ -147,7 +182,9 @@ function createBooth(id) {
     return b;
 }
 
-/* SEARCH */
+/* =========================
+   SEARCH (CENTER + BLINK)
+========================= */
 searchBox.addEventListener("input", () => {
 
     const val = searchBox.value.toLowerCase();
@@ -168,20 +205,19 @@ searchBox.addEventListener("input", () => {
 
         div.onclick = () => {
             const el = document.querySelector(`[data-id='${x.boothid}']`);
-            if (el) {
-                el.scrollIntoView({ behavior: "smooth", block: "center" });
 
-                // 🔥 HIGHLIGHT + BLINK
+            if (el) {
+                centerToElement(el); // 🔥 CENTER
+
                 el.classList.add("highlight");
-                el.classList.add("blink");
 
                 setTimeout(() => {
                     el.classList.remove("highlight");
-                    el.classList.remove("blink");
                 }, 5000);
 
                 el.click();
             }
+
             suggestions.style.display = "none";
         };
 
@@ -189,27 +225,37 @@ searchBox.addEventListener("input", () => {
     });
 });
 
-/* DRAG */
-let isDown = false, startX, startY, scrollLeft, scrollTop;
+/* =========================
+   DRAG (🔥 FIXED)
+========================= */
+let isDown = false;
+let startX, startY;
+let scrollLeft, scrollTop;
 
 container.addEventListener("mousedown", (e) => {
     isDown = true;
-    startX = e.pageX;
-    startY = e.pageY;
+    startX = e.clientX;
+    startY = e.clientY;
     scrollLeft = container.scrollLeft;
     scrollTop = container.scrollTop;
 });
 
-container.addEventListener("mouseup", () => isDown = false);
 container.addEventListener("mouseleave", () => isDown = false);
+container.addEventListener("mouseup", () => isDown = false);
 
 container.addEventListener("mousemove", (e) => {
     if (!isDown) return;
-    container.scrollLeft = scrollLeft - (e.pageX - startX);
-    container.scrollTop = scrollTop - (e.pageY - startY);
+
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+
+    container.scrollLeft = scrollLeft - dx;
+    container.scrollTop = scrollTop - dy;
 });
 
-/* ZOOM */
+/* =========================
+   ZOOM
+========================= */
 document.getElementById("zoomIn").onclick = () => {
     zoomLevel += 0.1;
     floor.style.transform = `scale(${zoomLevel})`;
@@ -220,10 +266,13 @@ document.getElementById("zoomOut").onclick = () => {
     floor.style.transform = `scale(${zoomLevel})`;
 };
 
-/* CLOSE PANEL */
+/* =========================
+   CLOSE PANEL
+========================= */
 document.addEventListener("click", () => {
     panel.classList.add("hidden");
     suggestions.style.display = "none";
 });
 
+/* INIT */
 loadData();
