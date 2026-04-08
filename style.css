@@ -100,3 +100,16 @@ button:hover { opacity: 0.9; }
     border-radius: 12px;
 }
 .hidden { display: none; }
+
+/* KEEP YOUR STYLE, ONLY ADD BELOW */
+
+.sold { background: #ef4444; }     /* RED */
+.booked { background: #eab308; }   /* YELLOW */
+.agent { background: #22c55e; }    /* GREEN */
+.available { background: #3b82f6; }
+
+/* smoother UI */
+button:hover {
+    background: #f1f5f9;
+    transform: translateY(-1px);
+}
