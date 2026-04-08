@@ -11,35 +11,34 @@ let allData = [];
 let zoomLevel = 1;
 
 /* =========================
-   SAFE STATUS MAP
-========================= */
-function mapStatus(status) {
-    status = String(status || "").toLowerCase();
-
-    if (status === "booked") return "sold";     // red
-    if (status === "plotting") return "booked"; // yellow
-    if (status === "agent") return "agent";     // green
-
-    return "available";
-}
-
-/* =========================
-   SAFE NORMALIZE
+   NORMALIZE
 ========================= */
 function normalizeId(id) {
     return String(id).replace(/\s+/g, "").toLowerCase();
 }
 
 /* =========================
-   LOAD DATA (ULTRA SAFE)
+   STATUS MAPPING
+========================= */
+function mapStatus(status) {
+    status = String(status || "").toLowerCase();
+
+    if (status === "booked") return "sold";      // RED
+    if (status === "plotting") return "booked";  // YELLOW
+    if (status === "agent") return "agent";      // GREEN
+
+    return "available";
+}
+
+/* =========================
+   LOAD DATA (SAFE)
 ========================= */
 async function loadData() {
     try {
-        const res = await fetch(G_SCRIPT_URL);
+        const res = await fetch(`${G_SCRIPT_URL}?t=${Date.now()}`);
+        const text = await res.text();
 
-        const text = await res.text(); // 🔥 avoid crash
         let raw;
-
         try {
             raw = JSON.parse(text);
         } catch {
@@ -63,18 +62,17 @@ async function loadData() {
 
         allData = expanded;
 
-        console.log("✅ DATA:", allData);
+        console.log("✅ DATA LOADED:", allData);
 
     } catch (err) {
         console.error("❌ FETCH ERROR:", err);
     }
 
-    // 🔥 ALWAYS RENDER (even if API fails)
-    renderFloor();
+    renderFloor(); // ALWAYS render
 }
 
 /* =========================
-   HALL CONFIG (SAFE)
+   HALL CONFIG
 ========================= */
 const hallConfig = [
   {name:"Hall 5", start:5001, end:5078},
@@ -82,11 +80,11 @@ const hallConfig = [
   {name:"Hall 7", start:7001, end:7196},
   {name:"Hall 8", start:8001, end:8181},
   {name:"Hall 9", start:9001, end:9191},
-  {name:"Hall 10", start:1001, end:1151},
+  {name:"Hall 10", start:1001, end:1151}
 ];
 
 /* =========================
-   VARIANT CHECK
+   GET VARIANTS (5061-A)
 ========================= */
 function getVariants(baseId) {
     return allData.filter(x =>
@@ -95,14 +93,9 @@ function getVariants(baseId) {
 }
 
 /* =========================
-   RENDER FLOOR (CANNOT FAIL)
+   RENDER FLOOR
 ========================= */
 function renderFloor() {
-    if (!floor) {
-        console.error("❌ FLOOR ELEMENT NOT FOUND");
-        return;
-    }
-
     floor.innerHTML = "";
 
     hallConfig.forEach(hall => {
@@ -110,24 +103,24 @@ function renderFloor() {
         const hallDiv = document.createElement("div");
         hallDiv.className = "hall";
 
-        const title = document.createElement("h2");
-        title.innerText = hall.name;
-        hallDiv.appendChild(title);
+        const h2 = document.createElement("h2");
+        h2.innerText = hall.name;
+        hallDiv.appendChild(h2);
 
         const grid = document.createElement("div");
         grid.className = "grid";
 
         for (let i = hall.start; i <= hall.end; i++) {
 
-            const base = String(i);
-            const variants = getVariants(base);
+            const baseId = String(i);
+            const variants = getVariants(baseId);
 
             if (variants.length > 0) {
                 variants.forEach(v => {
                     grid.appendChild(createBooth(v.boothid));
                 });
             } else {
-                grid.appendChild(createBooth(base));
+                grid.appendChild(createBooth(baseId));
             }
         }
 
@@ -137,7 +130,7 @@ function renderFloor() {
 }
 
 /* =========================
-   CREATE BOOTH (SAFE)
+   CREATE BOOTH (SMART MATCH FIX)
 ========================= */
 function createBooth(id) {
     const b = document.createElement("div");
@@ -145,7 +138,17 @@ function createBooth(id) {
     b.innerText = id;
     b.dataset.id = id;
 
-    const d = allData.find(x => normalizeId(x.boothid) === normalizeId(id));
+    // 🔥 KEY FIX HERE
+    const d = allData.find(x => {
+        const dataId = normalizeId(x.boothid);
+        const boothId = normalizeId(id);
+
+        return (
+            dataId === boothId ||
+            dataId.startsWith(boothId + "-") ||
+            boothId.startsWith(dataId + "-")
+        );
+    });
 
     if (d) {
         b.className = "booth " + d.status;
@@ -169,10 +172,9 @@ function createBooth(id) {
 }
 
 /* =========================
-   SEARCH (SAFE)
+   SEARCH
 ========================= */
 searchBox.addEventListener("input", () => {
-
     const val = searchBox.value.toLowerCase();
 
     const list = allData.filter(x =>
@@ -251,7 +253,7 @@ container.addEventListener("mousemove", (e) => {
 });
 
 /* =========================
-   CLOSE PANEL
+   GLOBAL CLICK
 ========================= */
 document.addEventListener("click", () => {
     panel.classList.add("hidden");
