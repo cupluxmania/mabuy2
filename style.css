@@ -1,115 +1,120 @@
-body { margin: 0; font-family: 'Segoe UI', Arial, sans-serif; background: #f1f5f9; overflow-x: hidden; }
-header { background: white; padding: 20px 40px; font-size: 24px; border-bottom: 1px solid #ddd; font-weight: bold; }
-.container { padding: 20px 40px; }
+body { margin: 0; font-family: 'Segoe UI', Arial, sans-serif; background: #f1f5f9; }
 
-/* SEARCH */
-.searchWrapper { position: relative; margin-bottom: 20px; z-index: 1000; }
-#searchBox { width: 100%; padding: 15px; font-size: 16px; border-radius: 8px; border: 1px solid #ccc; }
-#suggestions { position: absolute; width: 100%; background: white; border-radius: 8px; display: none; max-height: 300px; overflow-y: auto; }
-.suggestionItem { padding: 12px; cursor: pointer; }
-.suggestionItem:hover { background: #eff6ff; }
-
-/* LEGEND */
-#legend { display: flex; gap: 20px; margin-bottom: 15px; font-weight: bold; }
-.dot { width: 14px; height: 14px; display: inline-block; border-radius: 3px; margin-right: 5px; }
-
-.available { background: #3b82f6; } /* blue */
-.sold { background: #ef4444; }      /* red */
-.booked { background: #eab308; }    /* yellow */
-.agent { background: #22c55e; }     /* green */
-
-/* MENU */
-#menu { margin-bottom: 20px; display: flex; gap: 10px; }
-button {
-    padding: 10px 16px;
-    cursor: pointer;
-    background: linear-gradient(135deg,#3b82f6,#2563eb);
-    border: none;
-    color: white;
-    border-radius: 8px;
+header {
+    background: white;
+    padding: 20px 40px;
+    font-size: 24px;
+    border-bottom: 1px solid #ddd;
     font-weight: bold;
 }
-button:hover { opacity: 0.9; }
 
-/* FLOOR */
+.container { padding: 20px 40px; }
+
+.searchWrapper { position: relative; margin-bottom: 20px; }
+#searchBox {
+    width: 100%;
+    padding: 14px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+}
+
+#suggestions {
+    position: absolute;
+    width: 100%;
+    background: white;
+    display: none;
+    max-height: 300px;
+    overflow-y: auto;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+}
+
+.suggestionItem {
+    padding: 10px;
+    cursor: pointer;
+}
+.suggestionItem:hover {
+    background: #e2e8f0;
+}
+
+#legend { display: flex; gap: 20px; margin-bottom: 10px; }
+
+.dot {
+    width: 14px;
+    height: 14px;
+    display: inline-block;
+    border-radius: 4px;
+    margin-right: 5px;
+}
+
+.available { background: #3b82f6; }
+.sold { background: #ef4444; }
+.booked { background: #eab308; }
+.agent { background: #22c55e; }
+
+#menu { margin-bottom: 10px; }
+button {
+    padding: 8px 14px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    cursor: pointer;
+}
+
 #floorContainer {
     height: 75vh;
     overflow: auto;
-    background: #fff;
-    border-radius: 12px;
+    background: white;
     cursor: grab;
-    user-select: none;
 }
-#floorContainer:active { cursor: grabbing; }
 
 #floor {
     display: flex;
-    gap: 100px;
-    padding: 200px;
+    gap: 80px;
+    padding: 120px;
     transform-origin: 0 0;
 }
 
-/* HALL */
-.hall { display: flex; flex-direction: column; gap: 15px; }
-.hall h2 { background: #f8fafc; padding: 8px 12px; border-radius: 6px; }
+.hall { display: flex; flex-direction: column; gap: 10px; }
 
-/* GRID */
-.grid { display: grid; grid-template-columns: repeat(8, 80px); gap: 10px; }
+.grid {
+    display: grid;
+    grid-template-columns: repeat(8, 80px);
+    gap: 10px;
+}
 
-/* BOOTH */
 .booth {
     width: 80px;
     height: 80px;
-    border-radius: 8px;
     display: flex;
-    justify-content: center;
     align-items: center;
+    justify-content: center;
     color: white;
-    font-size: 12px;
-    font-weight: bold;
+    font-size: 11px;
+    border-radius: 6px;
+    cursor: pointer;
     position: relative;
 }
 
-/* TOOLTIP */
 .booth:hover::after {
     content: attr(data-tooltip);
     position: absolute;
     bottom: 110%;
-    background: #111;
+    background: black;
     color: white;
-    padding: 5px 10px;
-    border-radius: 6px;
+    padding: 5px;
+    font-size: 11px;
 }
 
-/* HIGHLIGHT */
 .highlight {
-    outline: 4px solid #facc15;
-    animation: blink 1s infinite;
-}
-@keyframes blink {
-    50% { opacity: 0.3; }
+    outline: 4px solid yellow;
 }
 
-/* PANEL */
 #sidePanel {
     position: fixed;
     right: 20px;
     top: 120px;
     background: white;
     padding: 20px;
-    border-radius: 12px;
+    border-radius: 10px;
 }
+
 .hidden { display: none; }
-
-/* KEEP YOUR STYLE, ONLY ADD BELOW */
-
-.sold { background: #ef4444; }     /* RED */
-.booked { background: #eab308; }   /* YELLOW */
-.agent { background: #22c55e; }    /* GREEN */
-.available { background: #3b82f6; }
-
-/* smoother UI */
-button:hover {
-    background: #f1f5f9;
-    transform: translateY(-1px);
-}
