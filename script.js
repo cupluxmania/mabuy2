@@ -11,43 +11,50 @@ let allData = [];
 let zoomLevel = 1;
 
 /* =========================
-   NORMALIZE
+   SAFE STATUS MAP
+========================= */
+function mapStatus(status) {
+    status = String(status || "").toLowerCase();
+
+    if (status === "booked") return "sold";     // red
+    if (status === "plotting") return "booked"; // yellow
+    if (status === "agent") return "agent";     // green
+
+    return "available";
+}
+
+/* =========================
+   SAFE NORMALIZE
 ========================= */
 function normalizeId(id) {
     return String(id).replace(/\s+/g, "").toLowerCase();
 }
 
 /* =========================
-   STATUS MAPPING (NEW RULE)
-========================= */
-function mapStatus(status) {
-    status = (status || "").toLowerCase();
-
-    if (status === "booked") return "sold";      // RED
-    if (status === "plotting") return "booked";  // YELLOW
-    if (status === "agent") return "agent";      // GREEN
-
-    return "available";
-}
-
-/* =========================
-   LOAD DATA (SAFE)
+   LOAD DATA (ULTRA SAFE)
 ========================= */
 async function loadData() {
     try {
-        const res = await fetch(`${G_SCRIPT_URL}?t=${Date.now()}`);
-        const raw = await res.json();
+        const res = await fetch(G_SCRIPT_URL);
+
+        const text = await res.text(); // 🔥 avoid crash
+        let raw;
+
+        try {
+            raw = JSON.parse(text);
+        } catch {
+            console.error("❌ JSON ERROR:", text);
+            raw = [];
+        }
 
         const expanded = [];
 
         raw.forEach(row => {
-            if (!row.boothid) return;
+            if (!row || !row.boothid) return;
 
-            const booths = String(row.boothid).split(",");
-
-            booths.forEach(id => {
+            String(row.boothid).split(",").forEach(id => {
                 expanded.push({
-                    boothid: id.trim(), // KEEP ORIGINAL (5061-A SAFE)
+                    boothid: id.trim(),
                     status: mapStatus(row.status),
                     exhibitor: (row.exhibitor || "").trim()
                 });
@@ -56,17 +63,18 @@ async function loadData() {
 
         allData = expanded;
 
-        console.log("DATA LOADED:", allData);
+        console.log("✅ DATA:", allData);
 
-        renderFloor();
-
-    } catch (e) {
-        console.error("LOAD ERROR:", e);
+    } catch (err) {
+        console.error("❌ FETCH ERROR:", err);
     }
+
+    // 🔥 ALWAYS RENDER (even if API fails)
+    renderFloor();
 }
 
 /* =========================
-   HALL CONFIG (KEEP -A SAFE)
+   HALL CONFIG (SAFE)
 ========================= */
 const hallConfig = [
   {name:"Hall 5", start:5001, end:5078},
@@ -78,7 +86,7 @@ const hallConfig = [
 ];
 
 /* =========================
-   GET VARIANTS (5061-A)
+   VARIANT CHECK
 ========================= */
 function getVariants(baseId) {
     return allData.filter(x =>
@@ -87,16 +95,14 @@ function getVariants(baseId) {
 }
 
 /* =========================
-   CHECK VARIANT EXIST
-========================= */
-function hasVariant(baseId) {
-    return getVariants(baseId).length > 0;
-}
-
-/* =========================
-   RENDER FLOOR (FIXED)
+   RENDER FLOOR (CANNOT FAIL)
 ========================= */
 function renderFloor() {
+    if (!floor) {
+        console.error("❌ FLOOR ELEMENT NOT FOUND");
+        return;
+    }
+
     floor.innerHTML = "";
 
     hallConfig.forEach(hall => {
@@ -104,29 +110,25 @@ function renderFloor() {
         const hallDiv = document.createElement("div");
         hallDiv.className = "hall";
 
-        const h2 = document.createElement("h2");
-        h2.innerText = hall.name;
-        hallDiv.appendChild(h2);
+        const title = document.createElement("h2");
+        title.innerText = hall.name;
+        hallDiv.appendChild(title);
 
         const grid = document.createElement("div");
         grid.className = "grid";
 
         for (let i = hall.start; i <= hall.end; i++) {
 
-            const baseId = String(i);
+            const base = String(i);
+            const variants = getVariants(base);
 
-            // 🔥 IMPORTANT FIX
-            if (hasVariant(baseId)) {
-                const variants = getVariants(baseId);
-
+            if (variants.length > 0) {
                 variants.forEach(v => {
                     grid.appendChild(createBooth(v.boothid));
                 });
-
-                continue;
+            } else {
+                grid.appendChild(createBooth(base));
             }
-
-            grid.appendChild(createBooth(baseId));
         }
 
         hallDiv.appendChild(grid);
@@ -135,7 +137,7 @@ function renderFloor() {
 }
 
 /* =========================
-   CREATE BOOTH
+   CREATE BOOTH (SAFE)
 ========================= */
 function createBooth(id) {
     const b = document.createElement("div");
@@ -158,7 +160,7 @@ function createBooth(id) {
 
         panelContent.innerHTML = `
             <b>Booth:</b> ${id}<br>
-            <b>Status:</b> ${b.className.replace('booth ','')}<br>
+            <b>Status:</b> ${b.className.replace("booth ","")}<br>
             <b>Exhibitor:</b> ${b.dataset.name || "-"}
         `;
     };
@@ -167,13 +169,14 @@ function createBooth(id) {
 }
 
 /* =========================
-   SEARCH (FIXED CLICKABLE)
+   SEARCH (SAFE)
 ========================= */
 searchBox.addEventListener("input", () => {
+
     const val = searchBox.value.toLowerCase();
 
     const list = allData.filter(x =>
-        normalizeId(x.boothid).includes(normalizeId(val)) ||
+        normalizeId(x.boothid).includes(val) ||
         (x.exhibitor || "").toLowerCase().includes(val)
     );
 
@@ -216,13 +219,14 @@ document.getElementById("zoomIn").onclick = () => {
     zoomLevel += 0.1;
     floor.style.transform = `scale(${zoomLevel})`;
 };
+
 document.getElementById("zoomOut").onclick = () => {
     zoomLevel = Math.max(0.3, zoomLevel - 0.1);
     floor.style.transform = `scale(${zoomLevel})`;
 };
 
 /* =========================
-   DRAG (WORKING)
+   DRAG
 ========================= */
 let isDown = false, startX, startY, scrollLeft, scrollTop;
 
@@ -234,8 +238,8 @@ container.addEventListener("mousedown", (e) => {
     scrollTop = container.scrollTop;
 });
 
-container.addEventListener("mouseleave", () => isDown = false);
 container.addEventListener("mouseup", () => isDown = false);
+container.addEventListener("mouseleave", () => isDown = false);
 
 container.addEventListener("mousemove", (e) => {
     if (!isDown) return;
@@ -247,7 +251,7 @@ container.addEventListener("mousemove", (e) => {
 });
 
 /* =========================
-   GLOBAL CLICK
+   CLOSE PANEL
 ========================= */
 document.addEventListener("click", () => {
     panel.classList.add("hidden");
