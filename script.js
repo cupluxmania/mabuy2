@@ -11,7 +11,7 @@ const reportBtn = document.getElementById("reportBtn");
 let allData = [];
 
 /* =========================
-   CLEAN SAFE
+   CLEAN
 ========================= */
 function clean(v) {
     return v ? String(v).replace(/\s+/g, " ").trim() : "";
@@ -32,38 +32,27 @@ function getStatus(row) {
 }
 
 /* =========================
-   BOOTH PARSER (SAFE SPLIT ONLY)
+   BOOTH PARSER (FIXED FOR YOUR API)
 ========================= */
 function parseBooths(raw) {
 
-    const id = String(raw).trim();
+    if (!raw) return { list: [] };
 
-    // comma group
-    if (id.includes(",")) {
-        return {
-            list: id.split(",").map(x => x.trim())
-        };
-    }
+    const cleaned = String(raw)
+        .replace(/\n/g, ",")   // 🔥 FIX newline issue
+        .replace(/\s+/g, " ")  // normalize spaces
+        .trim();
 
-    // numeric range group
-    if (id.includes("-") && /^\d/.test(id)) {
-        const [a, b] = id.split("-").map(Number);
-
-        if (!isNaN(a) && !isNaN(b)) {
-            const list = [];
-            for (let i = a; i <= b; i++) list.push(String(i));
-            return { list };
-        }
-    }
-
-    // IMPORTANT: suffix booth stays RAW (5035-A untouched)
     return {
-        list: [id]
+        list: cleaned
+            .split(",")
+            .map(x => x.trim())
+            .filter(Boolean)
     };
 }
 
 /* =========================
-   LOAD DATA (NO ID CHANGE)
+   LOAD DATA (SAFE + STABLE)
 ========================= */
 async function loadData() {
 
@@ -74,16 +63,22 @@ async function loadData() {
         const temp = [];
 
         raw.forEach(row => {
-            if (!row.boothid) return;
+
+            if (!row.boothid || !String(row.boothid).trim()) return;
 
             const group = parseBooths(row.boothid);
-            const totalSize = Number(row.size || row.sqm || 9);
-            const perSize = totalSize / group.list.length;
+
+            const totalSize = Number(row.size || 0);
+            const perSize = group.list.length ? totalSize / group.list.length : totalSize;
 
             group.list.forEach(id => {
 
+                const boothId = String(id).trim();
+
+                if (!boothId) return;
+
                 temp.push({
-                    boothid: String(id), // 🔥 ABSOLUTE RAW STRING ONLY
+                    boothid: boothId,     // 🔥 NEVER MODIFIED (5035-A SAFE)
                     status: getStatus(row),
                     exhibitor: clean(row.exhibitor),
                     size: perSize
@@ -95,19 +90,19 @@ async function loadData() {
         renderFloor();
 
     } catch (err) {
-        console.error("DATABASE ERROR:", err);
+        console.error("API ERROR:", err);
     }
 }
 
 /* =========================
-   FIND (STRICT MATCH ONLY)
+   FIND (STRICT MATCH)
 ========================= */
 function find(id) {
     return allData.filter(x => String(x.boothid) === String(id));
 }
 
 /* =========================
-   HALL CONFIG (UNCHANGED)
+   HALL CONFIG
 ========================= */
 const hallConfig = [
   {name:"Hall 5", start:5001, end:5079},
@@ -180,8 +175,7 @@ function createBooth(id, data) {
 
     b.className = "booth " + status;
 
-    // 🔥 RAW DISPLAY ONLY (5035-A NEVER CHANGED)
-    b.innerText = id;
+    b.innerText = id; // 🔥 RAW ONLY (NO MODIFICATION EVER)
 
     b.dataset.id = id;
 
@@ -203,7 +197,7 @@ function createBooth(id, data) {
 }
 
 /* =========================
-   SEARCH (SAFE RAW MATCH)
+   SEARCH
 ========================= */
 searchBox.addEventListener("input", () => {
 
@@ -244,7 +238,7 @@ searchBox.addEventListener("input", () => {
 });
 
 /* =========================
-   DRAG FIX (STABLE)
+   DRAG (FIXED)
 ========================= */
 let isDown = false, startX, startY, scrollLeft, scrollTop;
 
@@ -273,10 +267,15 @@ document.addEventListener("mousemove", (e) => {
 });
 
 /* =========================
-   REPORT (FULL FIXED)
+   REPORT (FIXED + SAFE)
 ========================= */
 reportBtn.onclick = (e) => {
     e.stopPropagation();
+
+    if (!allData.length) {
+        alert("No data loaded. Check API.");
+        return;
+    }
 
     const summary = {
         total: 0,
@@ -292,7 +291,7 @@ reportBtn.onclick = (e) => {
     allData.forEach(x => {
 
         const status = x.status || "available";
-        const hall = x.hall || "Unknown";
+        const hall = x.hall || "UNKNOWN";
         const size = Number(x.size || 0);
 
         summary.total++;
@@ -317,19 +316,17 @@ reportBtn.onclick = (e) => {
 
     let html = `
         <h3>📊 OVERALL</h3>
-        Total Booth: ${summary.total}<br>
+        Total: ${summary.total}<br>
         Available: ${summary.available || 0}<br>
         Sold: ${summary.sold || 0}<br>
         Booked: ${summary.booked || 0}<br>
         Agent: ${summary.agent || 0}<br>
-        Total Size: ${summary.size}
+        Size: ${summary.size}
         <hr>
     `;
 
-    Object.keys(hallReport).forEach(h => {
-
+    for (const h in hallReport) {
         const r = hallReport[h];
-
         html += `
             <b>${h}</b><br>
             Total: ${r.total}<br>
@@ -340,7 +337,7 @@ reportBtn.onclick = (e) => {
             Size: ${r.size}
             <hr>
         `;
-    });
+    }
 
     panel.classList.remove("hidden");
     panelContent.innerHTML = html;
