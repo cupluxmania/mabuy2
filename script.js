@@ -12,7 +12,7 @@ let allData = [];
 let zoomLevel = 1;
 
 /* =========================
-   UTIL
+   CLEAN
 ========================= */
 function clean(val) {
     if (!val) return "";
@@ -34,44 +34,38 @@ function getStatus(row) {
 }
 
 /* =========================
-   GROUP DETECTOR (ADVANCED)
+   GROUP DETECTOR (SAFE)
 ========================= */
-function parseBoothGroup(rawId) {
+function parseGroup(id) {
+    id = String(id).trim();
 
-    const id = String(rawId).trim();
+    // CASE 1: joined numeric range 5003-5005
+    if (id.includes("-") && /^\d/.test(id)) {
+        const parts = id.split("-").map(x => x.trim());
 
-    // single booth
-    if (!id.includes("-")) {
-        return {
-            groupId: id,
-            members: [id]
-        };
-    }
+        if (parts.every(p => /^\d+$/.test(p))) {
+            const start = Number(parts[0]);
+            const end = Number(parts[parts.length - 1]);
 
-    const parts = id.split("-").map(x => x.trim());
+            const members = [];
+            for (let i = start; i <= end; i++) {
+                members.push(String(i));
+            }
 
-    // numeric range: 5003-5004-5005
-    if (parts.every(p => /^\d+$/.test(p))) {
-
-        const start = Number(parts[0]);
-        const end = Number(parts[parts.length - 1]);
-
-        const members = [];
-
-        for (let i = start; i <= end; i++) {
-            members.push(String(i));
+            return { groupId: id, members };
         }
 
+        // CASE 2: -A / -B style (IMPORTANT RESTORE)
         return {
             groupId: id,
-            members
+            members: parts
         };
     }
 
-    // fallback (non numeric)
+    // normal booth
     return {
         groupId: id,
-        members: parts
+        members: [id]
     };
 }
 
@@ -89,7 +83,7 @@ async function loadData() {
 
         String(row.boothid).split(",").forEach(id => {
 
-            const parsed = parseBoothGroup(id);
+            const parsed = parseGroup(id);
 
             parsed.members.forEach(member => {
 
@@ -129,24 +123,24 @@ const hallConfig = [
 function renderFloor() {
     floor.innerHTML = "";
 
-    hallConfig.forEach(hall => {
+    hallConfig.forEach(h => {
 
         const hallDiv = document.createElement("div");
         hallDiv.className = "hall";
 
         const title = document.createElement("h3");
-        title.innerText = hall.name;
+        title.innerText = h.name;
         hallDiv.appendChild(title);
 
         const grid = document.createElement("div");
         grid.className = "grid";
 
-        if (hall.name === "Ambulance") {
+        if (h.name === "Ambulance") {
             for (let i = 65; i <= 90; i++) {
                 grid.appendChild(createBooth(String.fromCharCode(i)));
             }
         } else {
-            for (let i = hall.start; i <= hall.end; i++) {
+            for (let i = h.start; i <= h.end; i++) {
                 grid.appendChild(createBooth(String(i)));
             }
         }
@@ -157,7 +151,7 @@ function renderFloor() {
 }
 
 /* =========================
-   CREATE BOOTH
+   CREATE BOOTH (FIXED)
 ========================= */
 function createBooth(id) {
 
@@ -165,7 +159,7 @@ function createBooth(id) {
 
     let status = "available";
     let exhibitor = "";
-    let finalSize = 0;
+    let size = 0;
 
     if (matches.length) {
 
@@ -175,27 +169,26 @@ function createBooth(id) {
 
         exhibitor = matches.map(x => x.exhibitor).filter(Boolean).join(", ");
 
-        const groupItems = allData.filter(x => x.groupId === matches[0]?.groupId);
+        const group = allData.filter(x => x.groupId === matches[0]?.groupId);
 
-        const totalSize = groupItems.reduce((sum, x) => sum + x.size, 0);
+        const totalSize = group.reduce((s, x) => s + x.size, 0);
 
-        if (groupItems.length > 1) {
-            finalSize = Math.round(totalSize / groupItems.length);
+        if (group.length > 1) {
+            size = Math.round(totalSize / group.length); // auto split
         } else {
-            finalSize = totalSize;
+            size = totalSize;
         }
     }
 
     const b = document.createElement("div");
     b.className = "booth " + status;
 
-    // 🔥 KEEP RAW ID (IMPORTANT FOR 5035-A)
+    // IMPORTANT: keep original ID (5035-A works again)
     b.innerText = id;
-
     b.dataset.id = id;
 
-    b.dataset.tooltip = finalSize
-        ? `${status.toUpperCase()} • [ ${finalSize} sqm ]`
+    b.dataset.tooltip = size
+        ? `${status.toUpperCase()} • [ ${size} sqm ]`
         : `${status.toUpperCase()} • [ - ]`;
 
     b.onclick = (e) => {
@@ -206,7 +199,7 @@ function createBooth(id) {
             <b>Booth:</b> ${id}<br>
             <b>Status:</b> ${status.toUpperCase()}<br>
             <b>Exhibitor:</b> ${exhibitor || "-"}<br>
-            <b>Size:</b> ${finalSize || "-"}
+            <b>Size:</b> ${size || "-"}
         `;
     };
 
@@ -214,7 +207,7 @@ function createBooth(id) {
 }
 
 /* =========================
-   SEARCH
+   SEARCH (FIXED)
 ========================= */
 searchBox.addEventListener("input", () => {
 
@@ -255,114 +248,6 @@ searchBox.addEventListener("input", () => {
 });
 
 /* =========================
-   REPORT (SAFE GROUP AWARE)
+   INIT
 ========================= */
-reportBtn.onclick = (e) => {
-    e.stopPropagation();
-
-    const summary = {
-        total: 0,
-        available: 0,
-        sold: 0,
-        booked: 0,
-        agent: 0,
-        size: 0
-    };
-
-    const hallReport = {};
-
-    allData.forEach(x => {
-
-        summary.total++;
-        summary[x.status]++;
-        summary.size += x.size;
-
-        const hall = x.boothid.match(/^\d+/)
-            ? `Hall ${Math.floor(Number(x.boothid) / 1000)}`
-            : "Ambulance";
-
-        if (!hallReport[hall]) {
-            hallReport[hall] = {
-                total: 0,
-                available: 0,
-                sold: 0,
-                booked: 0,
-                agent: 0,
-                size: 0
-            };
-        }
-
-        hallReport[hall].total++;
-        hallReport[hall][x.status]++;
-        hallReport[hall].size += x.size;
-    });
-
-    let html = `
-        <h3>📊 OVERALL</h3>
-        Booth: ${summary.total}<br>
-        Available: ${summary.available}<br>
-        Sold: ${summary.sold}<br>
-        Booked: ${summary.booked}<br>
-        Agent: ${summary.agent}<br>
-        Total Size: ${summary.size}
-        <hr>
-    `;
-
-    Object.keys(hallReport).forEach(h => {
-        const r = hallReport[h];
-
-        html += `
-            <b>${h}</b><br>
-            Booth: ${r.total}<br>
-            Available: ${r.available}<br>
-            Sold: ${r.sold}<br>
-            Booked: ${r.booked}<br>
-            Agent: ${r.agent}<br>
-            Total Size: ${r.size}
-            <hr>
-        `;
-    });
-
-    panel.classList.remove("hidden");
-    panelContent.innerHTML = html;
-};
-
-/* =========================
-   DRAG + ZOOM + CLOSE
-========================= */
-let isDown = false, startX, startY, scrollLeft, scrollTop;
-
-container.addEventListener("mousedown", (e) => {
-    isDown = true;
-    startX = e.pageX;
-    startY = e.pageY;
-    scrollLeft = container.scrollLeft;
-    scrollTop = container.scrollTop;
-});
-
-document.addEventListener("mouseup", () => isDown = false);
-
-document.addEventListener("mousemove", (e) => {
-    if (!isDown) return;
-
-    container.scrollLeft = scrollLeft - (e.pageX - startX);
-    container.scrollTop = scrollTop - (e.pageY - startY);
-});
-
-document.getElementById("zoomIn").onclick = () => {
-    zoomLevel += 0.1;
-    floor.style.transform = `scale(${zoomLevel})`;
-};
-
-document.getElementById("zoomOut").onclick = () => {
-    zoomLevel = Math.max(0.3, zoomLevel - 0.1);
-    floor.style.transform = `scale(${zoomLevel})`;
-};
-
-document.addEventListener("click", () => {
-    panel.classList.add("hidden");
-    suggestions.style.display = "none";
-});
-
-/* INIT */
 loadData();
