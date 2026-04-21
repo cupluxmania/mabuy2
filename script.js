@@ -19,55 +19,6 @@ function clean(val) {
     return String(val).replace(/\s+/g, " ").trim();
 }
 
-function normalize(val) {
-    return String(val || "").replace(/\s+/g, "").toLowerCase();
-}
-
-function format(val) {
-    return String(val || "");
-}
-
-/* =========================
-   HALL DETECTOR (FIXED)
-========================= */
-function getHall(id) {
-
-    const str = String(id);
-
-    // pure number only
-    const isPureNumber = /^\d+$/.test(str);
-    const num = isPureNumber ? Number(str) : null;
-
-    if (num !== null) {
-        if (num >= 5000 && num < 6000) return "Hall 5";
-        if (num >= 6000 && num < 7000) return "Hall 6";
-        if (num >= 7000 && num < 8000) return "Hall 7";
-        if (num >= 8000 && num < 9000) return "Hall 8";
-        if (num >= 9000 && num < 10000) return "Hall 9";
-        if (num >= 1000 && num < 2000) return "Hall 10";
-    }
-
-    if (/^[a-zA-Z]$/.test(str)) return "Ambulance";
-
-    // handle 5035-A type
-    if (str.includes("-")) {
-        const base = str.split("-")[0];
-
-        if (/^\d+$/.test(base)) {
-            const n = Number(base);
-
-            if (n >= 5000 && n < 6000) return "Hall 5";
-            if (n >= 6000 && n < 7000) return "Hall 6";
-            if (n >= 7000 && n < 8000) return "Hall 7";
-            if (n >= 8000 && n < 9000) return "Hall 8";
-            if (n >= 9000 && n < 10000) return "Hall 9";
-            if (n >= 1000 && n < 2000) return "Hall 10";
-        }
-    }
-
-    return "Other";
-}
-
 /* =========================
    STATUS
 ========================= */
@@ -95,16 +46,14 @@ async function loadData() {
         if (!row.boothid) return;
 
         String(row.boothid).split(",").forEach(id => {
-            const cleanId = String(id).trim();
+
+            const cleanId = String(id).trim(); // ✅ KEEP RAW EXACT
 
             temp.push({
-                rawId: cleanId,
-                keyId: normalize(cleanId),
-                label: cleanId,
+                boothid: cleanId,          // ✅ RAW ONLY (NO NORMALIZE)
                 status: getStatus(row),
                 exhibitor: clean(row.exhibitor),
-                size: Number(row.size || row.sqm || 0),
-                hall: getHall(cleanId)
+                size: Number(row.size || row.sqm || 0)
             });
         });
     });
@@ -127,30 +76,56 @@ const hallConfig = [
 ];
 
 /* =========================
+   VARIANT DETECTOR (LIKE MABUY)
+========================= */
+function getVariants(baseId) {
+    return allData.filter(x =>
+        String(x.boothid).startsWith(baseId + "-")
+    );
+}
+
+/* =========================
+   DISPLAY FORMAT
+========================= */
+function formatDisplayId(id) {
+    return String(id);
+}
+
+/* =========================
    RENDER
 ========================= */
 function renderFloor() {
     floor.innerHTML = "";
 
-    hallConfig.forEach(h => {
+    hallConfig.forEach(hall => {
 
         const hallDiv = document.createElement("div");
         hallDiv.className = "hall";
 
         const title = document.createElement("h3");
-        title.innerText = h.name;
+        title.innerText = hall.name;
         hallDiv.appendChild(title);
 
         const grid = document.createElement("div");
         grid.className = "grid";
 
-        if (h.name === "Ambulance") {
+        if (hall.name === "Ambulance") {
             for (let i = 65; i <= 90; i++) {
                 grid.appendChild(createBooth(String.fromCharCode(i)));
             }
         } else {
-            for (let i = h.start; i <= h.end; i++) {
-                grid.appendChild(createBooth(String(i)));
+            for (let i = hall.start; i <= hall.end; i++) {
+
+                const baseId = String(i);
+                const variants = getVariants(baseId);
+
+                if (variants.length > 0) {
+                    variants.forEach(v => {
+                        grid.appendChild(createBooth(v.boothid));
+                    });
+                } else {
+                    grid.appendChild(createBooth(baseId));
+                }
             }
         }
 
@@ -164,8 +139,9 @@ function renderFloor() {
 ========================= */
 function createBooth(id) {
 
-    const key = normalize(id);
-    const matches = allData.filter(x => x.keyId === key);
+    const displayId = formatDisplayId(id);
+
+    const matches = allData.filter(x => x.boothid === id);
 
     let status = "available";
     let exhibitor = "";
@@ -183,8 +159,10 @@ function createBooth(id) {
     const b = document.createElement("div");
     b.className = "booth " + status;
 
-    b.innerText = id;
-    b.dataset.id = key;
+    // ✅ RAW DISPLAY (THIS FIXES 5035-A ISSUE)
+    b.innerText = displayId;
+
+    b.dataset.id = id;
 
     b.dataset.tooltip = size
         ? `${status.toUpperCase()} • [ ${size} sqm ]`
@@ -195,7 +173,7 @@ function createBooth(id) {
 
         panel.classList.remove("hidden");
         panelContent.innerHTML = `
-            <b>Booth:</b> ${id}<br>
+            <b>Booth:</b> ${displayId}<br>
             <b>Status:</b> ${status.toUpperCase()}<br>
             <b>Exhibitor:</b> ${exhibitor || "-"}<br>
             <b>Size:</b> ${size || "-"}
@@ -213,7 +191,7 @@ searchBox.addEventListener("input", () => {
     const val = searchBox.value.toLowerCase();
 
     const result = allData.filter(x =>
-        x.keyId.includes(val) ||
+        String(x.boothid).toLowerCase().includes(val) ||
         (x.exhibitor || "").toLowerCase().includes(val)
     );
 
@@ -224,11 +202,11 @@ searchBox.addEventListener("input", () => {
 
         const div = document.createElement("div");
         div.className = "suggestionItem";
-        div.innerText = `${x.label} - ${x.exhibitor}`;
+        div.innerText = `${x.boothid} - ${x.exhibitor}`;
 
         div.onclick = () => {
 
-            const el = document.querySelector(`[data-id='${x.keyId}']`);
+            const el = document.querySelector(`[data-id='${x.boothid}']`);
             if (!el) return;
 
             el.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -247,7 +225,7 @@ searchBox.addEventListener("input", () => {
 });
 
 /* =========================
-   REPORT (UNCHANGED)
+   REPORT (UNCHANGED LOGIC)
 ========================= */
 reportBtn.onclick = (e) => {
     e.stopPropagation();
@@ -269,8 +247,10 @@ reportBtn.onclick = (e) => {
         summary[x.status]++;
         summary.size += x.size;
 
-        if (!hallReport[x.hall]) {
-            hallReport[x.hall] = {
+        const hall = getHall(x.boothid);
+
+        if (!hallReport[hall]) {
+            hallReport[hall] = {
                 total: 0,
                 available: 0,
                 sold: 0,
@@ -280,10 +260,32 @@ reportBtn.onclick = (e) => {
             };
         }
 
-        hallReport[x.hall].total++;
-        hallReport[x.hall][x.status]++;
-        hallReport[x.hall].size += x.size;
+        hallReport[hall].total++;
+        hallReport[hall][x.status]++;
+        hallReport[hall].size += x.size;
     });
+
+    function getHall(id) {
+        const num = parseInt(id);
+
+        if (!isNaN(num)) {
+            if (num >= 5000 && num < 6000) return "Hall 5";
+            if (num >= 6000 && num < 7000) return "Hall 6";
+            if (num >= 7000 && num < 8000) return "Hall 7";
+            if (num >= 8000 && num < 9000) return "Hall 8";
+            if (num >= 9000 && num < 10000) return "Hall 9";
+            if (num >= 1000 && num < 2000) return "Hall 10";
+        }
+
+        if (/^[a-zA-Z]$/.test(id)) return "Ambulance";
+
+        if (id.includes("-")) {
+            const base = id.split("-")[0];
+            return getHall(base);
+        }
+
+        return "Other";
+    }
 
     let html = `
         <h3>📊 OVERALL</h3>
@@ -316,7 +318,7 @@ reportBtn.onclick = (e) => {
 };
 
 /* =========================
-   DRAG + ZOOM + CLOSE (UNCHANGED)
+   DRAG + ZOOM + CLOSE
 ========================= */
 let isDown = false, startX, startY, scrollLeft, scrollTop;
 
@@ -347,12 +349,9 @@ document.getElementById("zoomOut").onclick = () => {
     floor.style.transform = `scale(${zoomLevel})`;
 };
 
-document.addEventListener("click", (e) => {
-    if (!panel.contains(e.target) && !e.target.closest(".booth")) {
-        panel.classList.add("hidden");
-        suggestions.style.display = "none";
-    }
+document.addEventListener("click", () => {
+    panel.classList.add("hidden");
+    suggestions.style.display = "none";
 });
 
-/* INIT */
 loadData();
