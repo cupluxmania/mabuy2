@@ -12,19 +12,18 @@ let zoomLevel = 1;
 let DEBUG = false;
 
 /* =========================
-   🧼 AUTO CLEANER
+   🧼 CLEAN TEXT
 ========================= */
 function cleanText(val) {
     if (!val) return "";
 
     let text = String(val)
-        .replace(/\u00A0/g, " ")        // remove non-breaking space
-        .replace(/\s+/g, " ")          // normalize spaces
+        .replace(/\u00A0/g, " ")
+        .replace(/\s+/g, " ")
         .trim();
 
     const lower = text.toLowerCase();
 
-    // normalize useless values
     if (["-", "n/a", "na", "null", "undefined"].includes(lower)) {
         return "";
     }
@@ -33,7 +32,18 @@ function cleanText(val) {
 }
 
 /* =========================
-   🔥 STATUS LOGIC (CLEAN INPUT)
+   🔥 NORMALIZE ID (CRITICAL FIX)
+========================= */
+function normalizeId(id) {
+    return String(id || "")
+        .replace(/\u00A0/g, "")
+        .replace(/\s+/g, "")
+        .trim()
+        .toLowerCase();
+}
+
+/* =========================
+   🔍 STATUS ANALYZER
 ========================= */
 function analyzeStatus(text) {
 
@@ -77,12 +87,9 @@ function getColor(status){
     }[status];
 }
 
-/* NORMALIZE */
-function normalizeId(id) {
-    return cleanText(id).replace(/\s+/g, "").toLowerCase();
-}
-
-/* LOAD DATA */
+/* =========================
+   LOAD DATA
+========================= */
 async function loadData() {
     const res = await fetch(`${G_SCRIPT_URL}?cmd=read&t=${Date.now()}`);
     const raw = await res.json();
@@ -96,22 +103,20 @@ async function loadData() {
 
         booths.forEach(id => {
 
-            const cleanedStatus = cleanText(row.status);
-            const cleanedHelper = cleanText(row.helper);
-            const cleanedExhibitor = cleanText(row.exhibitor);
+            const boothIdClean = normalizeId(id);
 
             const textSource = [
-                cleanedStatus,
-                cleanedHelper,
-                cleanedExhibitor
+                cleanText(row.status),
+                cleanText(row.helper),
+                cleanText(row.exhibitor)
             ].join(" ");
 
             const analysis = analyzeStatus(textSource);
 
             expanded.push({
-                boothid: cleanText(id),
+                boothid: boothIdClean,
                 status: analysis.status,
-                exhibitor: cleanedExhibitor,
+                exhibitor: cleanText(row.exhibitor),
                 debug: analysis
             });
         });
@@ -121,7 +126,9 @@ async function loadData() {
     renderFloor();
 }
 
-/* HALL CONFIG */
+/* =========================
+   HALL CONFIG
+========================= */
 const hallConfig = [
   {name:"Hall 5", start:5001, end:5078},
   {name:"Hall 6", start:6001, end:6189},
@@ -132,7 +139,9 @@ const hallConfig = [
   {name:"Ambulance", start:"A", end:"Z"}
 ];
 
-/* RENDER */
+/* =========================
+   RENDER
+========================= */
 function renderFloor() {
     floor.innerHTML = "";
 
@@ -163,15 +172,19 @@ function renderFloor() {
     });
 }
 
-/* CREATE BOOTH */
+/* =========================
+   CREATE BOOTH (FIXED MERGE)
+========================= */
 function createBooth(id) {
+
+    const normId = normalizeId(id);
 
     const b = document.createElement("div");
     b.className = "booth available";
     b.innerText = id;
-    b.dataset.id = id;
+    b.dataset.id = normId;
 
-    const matches = allData.filter(x => normalizeId(x.boothid) === normalizeId(id));
+    const matches = allData.filter(x => x.boothid === normId);
 
     let finalStatus = "available";
     let exhibitorName = "";
@@ -179,6 +192,7 @@ function createBooth(id) {
 
     if (matches.length) {
 
+        // 🔥 PRIORITY MERGE
         if (matches.some(x => x.status === "agent")) finalStatus = "agent";
         else if (matches.some(x => x.status === "sold")) finalStatus = "sold";
         else if (matches.some(x => x.status === "booked")) finalStatus = "booked";
@@ -210,13 +224,15 @@ function createBooth(id) {
     return b;
 }
 
-/* SEARCH */
+/* =========================
+   SEARCH (FIXED)
+========================= */
 searchBox.addEventListener("input", () => {
 
     const val = searchBox.value.toLowerCase();
 
     const result = allData.filter(x =>
-        normalizeId(x.boothid).includes(val) ||
+        x.boothid.includes(val) ||
         (x.exhibitor || "").toLowerCase().includes(val)
     );
 
@@ -242,7 +258,9 @@ searchBox.addEventListener("input", () => {
     });
 });
 
-/* DEBUG TOGGLE */
+/* =========================
+   DEBUG TOGGLE
+========================= */
 document.addEventListener("keydown", (e) => {
     if (e.key === "d") {
         DEBUG = !DEBUG;
@@ -251,7 +269,9 @@ document.addEventListener("keydown", (e) => {
     }
 });
 
-/* DRAG */
+/* =========================
+   DRAG
+========================= */
 let isDown = false, startX, startY, scrollLeft, scrollTop;
 
 container.addEventListener("mousedown", (e) => {
@@ -271,7 +291,9 @@ container.addEventListener("mousemove", (e) => {
     container.scrollTop = scrollTop - (e.pageY - startY);
 });
 
-/* ZOOM */
+/* =========================
+   ZOOM
+========================= */
 document.getElementById("zoomIn").onclick = () => {
     zoomLevel += 0.1;
     floor.style.transform = `scale(${zoomLevel})`;
@@ -281,7 +303,9 @@ document.getElementById("zoomOut").onclick = () => {
     floor.style.transform = `scale(${zoomLevel})`;
 };
 
-/* CLOSE */
+/* =========================
+   CLOSE
+========================= */
 document.addEventListener("click", () => {
     panel.classList.add("hidden");
     suggestions.style.display = "none";
