@@ -29,19 +29,6 @@ function normalizeId(id) {
 }
 
 /* =========================
-   🔍 FALLBACK ANALYZER
-========================= */
-function analyzeStatus(text) {
-    const raw = cleanText(text);
-    if (!raw) return "available";
-    if (raw.toLowerCase().includes("agent")) return "agent";
-    if (/[a-zA-Z]/.test(raw)) {
-        return /[A-Z]/.test(raw) ? "sold" : "booked";
-    }
-    return "available";
-}
-
-/* =========================
    🎯 STATUS FROM SHEET
 ========================= */
 function getStatusFromSheet(row) {
@@ -52,20 +39,23 @@ function getStatusFromSheet(row) {
     if (status.includes("agent")) return "agent";
 
     const fallbackText = [cleanText(row.helper), cleanText(row.exhibitor)].join(" ");
-    return analyzeStatus(fallbackText);
+    const raw = cleanText(fallbackText);
+    if (!raw) return "available";
+    if (raw.toLowerCase().includes("agent")) return "agent";
+    if (/[a-zA-Z]/.test(raw)) {
+        return /[A-Z]/.test(raw) ? "sold" : "booked";
+    }
+    return "available";
 }
 
 function getColor(status){
     return {
-        available:"#3b82f6",
-        sold:"#ef4444",
-        booked:"#eab308",
-        agent:"#22c55e"
+        available:"#3b82f6", sold:"#ef4444", booked:"#eab308", agent:"#22c55e"
     }[status];
 }
 
 /* =========================
-   LOAD DATA
+   LOAD DATA (UPDATED FOR SQM CALCULATION)
 ========================= */
 async function loadData() {
     const res = await fetch(`${G_SCRIPT_URL}?cmd=read&t=${Date.now()}`);
@@ -74,14 +64,21 @@ async function loadData() {
 
     raw.forEach(row => {
         if (!row.boothid) return;
-        const booths = String(row.boothid).split(",");
+        
+        // Split IDs (e.g. "5001, 5002")
+        const booths = String(row.boothid).split(",").map(s => s.trim()).filter(Boolean);
+        const count = booths.length;
+        
+        // Parse Size and divide by number of booths
+        const totalSize = parseFloat(row.size) || 0;
+        const individualSize = count > 0 ? (totalSize / count) : 0;
+
         booths.forEach(id => {
-            const boothIdClean = normalizeId(id);
-            const finalStatus = getStatusFromSheet(row);
             expanded.push({
-                boothid: boothIdClean,
-                status: finalStatus,
-                exhibitor: cleanText(row.exhibitor)
+                boothid: normalizeId(id),
+                status: getStatusFromSheet(row),
+                exhibitor: cleanText(row.exhibitor),
+                sqm: individualSize
             });
         });
     });
@@ -90,16 +87,8 @@ async function loadData() {
     renderFloor();
 }
 
-function getVariants(baseId) {
-    return allData.filter(x => normalizeId(x.boothid).startsWith(normalizeId(baseId) + "-"));
-}
-
-function formatDisplayId(id) {
-    return id.replace(/-([a-z])$/, (_, c) => "-" + c.toUpperCase());
-}
-
 /* =========================
-   HALL CONFIG
+   HALL CONFIG & RENDER
 ========================= */
 const hallConfig = [
   {name:"Hall 5", start:5001, end:5078},
@@ -111,20 +100,22 @@ const hallConfig = [
   {name:"Ambulance", start:"A", end:"Z"}
 ];
 
-/* =========================
-   RENDER (UPDATED FOR SUMMARY BAR)
-========================= */
+function getVariants(baseId) {
+    return allData.filter(x => normalizeId(x.boothid).startsWith(normalizeId(baseId) + "-"));
+}
+
+function formatDisplayId(id) {
+    return id.replace(/-([a-z])$/, (_, c) => "-" + c.toUpperCase());
+}
+
 function renderFloor() {
     floor.innerHTML = "";
-
     hallConfig.forEach(hall => {
         const hallDiv = document.createElement("div");
         hallDiv.className = "hall";
 
-        // Header containing Title and the Count Bar
         const headerRow = document.createElement("div");
         headerRow.className = "hall-header";
-
         const title = document.createElement("h3");
         title.innerText = hall.name;
         headerRow.appendChild(title);
@@ -134,29 +125,21 @@ function renderFloor() {
         
         const boothElements = [];
         if (hall.name === "Ambulance") {
-            for (let i = 65; i <= 90; i++) {
-                boothElements.push(createBooth(String.fromCharCode(i)));
-            }
+            for (let i = 65; i <= 90; i++) boothElements.push(createBooth(String.fromCharCode(i)));
         } else {
             for (let i = hall.start; i <= hall.end; i++) {
-                const baseId = String(i);
-                const variants = getVariants(baseId);
-                if (variants.length > 0) {
-                    variants.forEach(v => boothElements.push(createBooth(v.boothid)));
-                } else {
-                    boothElements.push(createBooth(baseId));
-                }
+                const variants = getVariants(String(i));
+                if (variants.length > 0) variants.forEach(v => boothElements.push(createBooth(v.boothid)));
+                else boothElements.push(createBooth(String(i)));
             }
         }
 
-        // Calculate Totals for this Hall
         const counts = { available: 0, sold: 0, booked: 0, agent: 0 };
         boothElements.forEach(el => {
             const status = el.className.split(" ")[1];
             if(counts[status] !== undefined) counts[status]++;
         });
 
-        // Create the Count Chips (Available, Sold, Booked, Agent)
         Object.keys(counts).forEach(status => {
             const chip = document.createElement("div");
             chip.className = "count-chip";
@@ -166,11 +149,9 @@ function renderFloor() {
 
         headerRow.appendChild(summary);
         hallDiv.appendChild(headerRow);
-
         const grid = document.createElement("div");
         grid.className = "grid";
         boothElements.forEach(be => grid.appendChild(be));
-
         hallDiv.appendChild(grid);
         floor.appendChild(hallDiv);
     });
@@ -187,22 +168,25 @@ function createBooth(id) {
     const matches = allData.filter(x => x.boothid === normId);
     let finalStatus = "available";
     let exhibitorName = "";
+    let sqm = 0;
 
     if (matches.length) {
         if (matches.some(x => x.status === "agent")) finalStatus = "agent";
         else if (matches.some(x => x.status === "sold")) finalStatus = "sold";
         else if (matches.some(x => x.status === "booked")) finalStatus = "booked";
         exhibitorName = matches.map(x => x.exhibitor).filter(Boolean).join(", ");
+        sqm = matches[0].sqm;
     }
 
     b.className = "booth " + finalStatus;
-    b.dataset.tooltip = `${displayId} • ${finalStatus.toUpperCase()}${exhibitorName ? " • " + exhibitorName : ""}`;
+    b.dataset.tooltip = `${displayId} • ${sqm} Sqm • ${finalStatus.toUpperCase()}`;
 
     b.onclick = (e) => {
         e.stopPropagation();
         panel.classList.remove("hidden");
         panelContent.innerHTML = `
             <b>Booth:</b> ${displayId}<br>
+            <b>Size:</b> ${sqm} Sqm<br>
             <b>Status:</b> <span style="color:${getColor(finalStatus)}">${finalStatus.toUpperCase()}</span><br>
             <b>Exhibitor:</b> ${exhibitorName || "-"}
         `;
@@ -211,7 +195,7 @@ function createBooth(id) {
 }
 
 /* =========================
-   SEARCH & DRAG & ZOOM (UNCHANGED)
+   SEARCH & ZOOM & DRAG
 ========================= */
 searchBox.addEventListener("input", () => {
     const val = searchBox.value.toLowerCase();
