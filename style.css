@@ -30,12 +30,6 @@ header {
     border-radius: 8px;
     border: 1px solid #ccc;
     font-size: 15px;
-    outline: none;
-}
-
-#searchBox:focus {
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 2px rgba(59,130,246,0.2);
 }
 
 /* DROPDOWN */
@@ -56,13 +50,10 @@ header {
 .suggestionItem {
     padding: 12px 15px;
     cursor: pointer;
-    border-bottom: 1px solid #f1f5f9;
-    font-size: 14px;
 }
 
 .suggestionItem:hover {
     background: #eff6ff;
-    color: #1d4ed8;
 }
 
 /* LEGEND */
@@ -87,24 +78,6 @@ header {
 .booked { background: #eab308; }
 .agent { background: #22c55e; }
 
-/* MENU */
-#menu {
-    margin-bottom: 10px;
-}
-
-button {
-    padding: 8px 14px;
-    border-radius: 6px;
-    border: 1px solid #ccc;
-    cursor: pointer;
-    background: white;
-    transition: 0.2s;
-}
-
-button:hover {
-    background: #f1f5f9;
-}
-
 /* FLOOR */
 #floorContainer {
     height: 75vh;
@@ -112,6 +85,7 @@ button:hover {
     background: white;
     cursor: grab;
     border-radius: 10px;
+    position: relative;
 }
 
 #floorContainer:active {
@@ -132,11 +106,6 @@ button:hover {
     gap: 10px;
 }
 
-.hall h3 {
-    margin: 0;
-    font-size: 18px;
-}
-
 /* GRID */
 .grid {
     display: grid;
@@ -155,10 +124,8 @@ button:hover {
     font-size: 11px;
     border-radius: 6px;
     cursor: pointer;
-    position: relative;
-    z-index: 1;
     user-select: none;
-    transition: transform 0.2s ease;
+    position: relative;
 }
 
 /* TOOLTIP */
@@ -173,36 +140,23 @@ button:hover {
     padding: 6px 10px;
     border-radius: 6px;
     font-size: 11px;
-    white-space: nowrap;
 }
 
-/* =========================
-   🔥 HIGHLIGHT (IMPROVED)
-========================= */
+/* HIGHLIGHT */
 .highlight {
     outline: 4px solid #facc15;
-    outline-offset: 3px;
-    z-index: 50 !important;
-    position: relative;
+    outline-offset: 2px;
 }
 
-/* =========================
-   🔥 SMOOTH BLINK (NO JUMP)
-========================= */
+/* BLINK */
 @keyframes blink {
-    0% {
-        box-shadow: 0 0 0 0 rgba(250,204,21,0.7);
-    }
-    50% {
-        box-shadow: 0 0 25px 10px rgba(250,204,21,0.9);
-    }
-    100% {
-        box-shadow: 0 0 0 0 rgba(250,204,21,0);
-    }
+    0% { transform: scale(1); box-shadow: 0 0 0px #facc15; }
+    50% { transform: scale(1.2); box-shadow: 0 0 20px #facc15; }
+    100% { transform: scale(1); box-shadow: 0 0 0px #facc15; }
 }
 
 .blink {
-    animation: blink 1s ease-in-out infinite;
+    animation: blink 0.6s ease-in-out infinite;
 }
 
 /* SIDE PANEL */
@@ -221,7 +175,18 @@ button:hover {
     display: none;
 }
 
-#panelContent b {
-    font-size: 12px;
-    color: #64748b;
+/* 🔥 REPORT OVERLAY FIX */
+#reportLayer {
+    position: absolute;
+    inset: 0;
+    background: white;
+    z-index: 1000;
+
+    /* IMPORTANT: allow drag pass-through */
+    pointer-events: none;
+}
+
+/* Only chart clickable */
+#reportLayer canvas {
+    pointer-events: auto;
 }
