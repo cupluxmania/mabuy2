@@ -9,7 +9,6 @@ const panelContent = document.getElementById("panelContent");
 const reportBtn = document.getElementById("reportBtn");
 
 let allData = [];
-let zoomLevel = 1;
 
 /* =========================
    CLEAN
@@ -34,24 +33,23 @@ function getStatus(row) {
 }
 
 /* =========================
-   GROUP PARSER (FINAL FIX)
+   GROUP PARSER (FINAL)
 ========================= */
 function parseGroup(id) {
 
     id = String(id).trim();
 
-    // CASE 1: LETTER SUFFIX → NEVER SPLIT
-    // 5035-A / 5035-B
+    // suffix booths → NEVER MERGE
     if (id.includes("-") && /[a-zA-Z]/.test(id.split("-")[1])) {
         return {
-            type: "suffix",
+            type: "single",
             groupId: id,
-            members: [id]
+            members: [id],
+            size: 9
         };
     }
 
-    // CASE 2: NUMERIC RANGE → SPLIT
-    // 5003-5004-5005
+    // numeric range → MERGE BLOCK
     if (id.includes("-") && /^\d/.test(id)) {
 
         const parts = id.split("-").map(x => x.trim());
@@ -69,16 +67,18 @@ function parseGroup(id) {
             return {
                 type: "range",
                 groupId: id,
-                members
+                members,
+                size: members.length * 9 // 9 sqm per booth
             };
         }
     }
 
-    // CASE 3: SINGLE
+    // single booth
     return {
         type: "single",
         groupId: id,
-        members: [id]
+        members: [id],
+        size: 9
     };
 }
 
@@ -95,18 +95,11 @@ async function loadData() {
         if (!row.boothid) return;
 
         String(row.boothid).split(",").forEach(id => {
-
-            const parsed = parseGroup(id);
-
             temp.push({
-                groupId: parsed.groupId,
-                type: parsed.type,
-                members: parsed.members,
+                ...parseGroup(id),
                 status: getStatus(row),
-                exhibitor: clean(row.exhibitor),
-                size: Number(row.size || row.sqm || 0)
+                exhibitor: clean(row.exhibitor)
             });
-
         });
     });
 
@@ -135,7 +128,7 @@ const hallConfig = [
 ];
 
 /* =========================
-   RENDER
+   RENDER FLOOR (KEY FIX)
 ========================= */
 function renderFloor() {
     floor.innerHTML = "";
@@ -152,13 +145,34 @@ function renderFloor() {
         const grid = document.createElement("div");
         grid.className = "grid";
 
+        const rendered = new Set();
+
+        const process = (id) => {
+
+            const group = findGroup(id);
+
+            if (!group) {
+                grid.appendChild(createBooth(id));
+                return;
+            }
+
+            // 🔥 IMPORTANT: only render once per group
+            if (rendered.has(group.groupId)) return;
+            rendered.add(group.groupId);
+
+            const span = Math.max(1, group.members.length);
+
+            const booth = createBooth(group.members[0], group, span);
+            grid.appendChild(booth);
+        };
+
         if (h.name === "Ambulance") {
             for (let i = 65; i <= 90; i++) {
-                grid.appendChild(createBooth(String.fromCharCode(i)));
+                process(String.fromCharCode(i));
             }
         } else {
             for (let i = h.start; i <= h.end; i++) {
-                grid.appendChild(createBooth(String(i)));
+                process(String(i));
             }
         }
 
@@ -168,15 +182,15 @@ function renderFloor() {
 }
 
 /* =========================
-   CREATE BOOTH (FIXED LOGIC)
+   CREATE BOOTH (MERGED VISUAL)
 ========================= */
-function createBooth(id) {
+function createBooth(id, group = null, span = 1) {
 
-    const group = findGroup(id);
+    if (!group) group = findGroup(id);
 
     let status = "available";
     let exhibitor = "";
-    let size = 0;
+    let size = 9;
 
     if (group) {
 
@@ -186,25 +200,19 @@ function createBooth(id) {
 
         exhibitor = group.exhibitor;
 
-        // 🔥 SIZE RULES
-        if (group.type === "range") {
-            // JOINED BOOTH → SPLIT SIZE
-            size = Math.round(group.size / group.members.length);
-        } else {
-            // suffix or single → NO SPLIT
-            size = group.size;
-        }
+        size = group.size || 9;
     }
 
     const b = document.createElement("div");
     b.className = "booth " + status;
 
+    // 🔥 REAL MERGED BLOCK
+    b.style.gridColumn = `span ${span}`;
+
     b.innerText = id;
     b.dataset.id = id;
 
-    b.dataset.tooltip = size
-        ? `${status.toUpperCase()} • [ ${size} sqm ]`
-        : `${status.toUpperCase()} • [ - ]`;
+    b.dataset.tooltip = `${status.toUpperCase()} • [ ${size} sqm ]`;
 
     b.onclick = (e) => {
         e.stopPropagation();
@@ -214,7 +222,7 @@ function createBooth(id) {
             <b>Booth:</b> ${id}<br>
             <b>Status:</b> ${status.toUpperCase()}<br>
             <b>Exhibitor:</b> ${exhibitor || "-"}<br>
-            <b>Size:</b> ${size || "-"}
+            <b>Size:</b> ${size}
         `;
     };
 
@@ -243,12 +251,10 @@ searchBox.addEventListener("input", () => {
         div.innerText = `${x.groupId} - ${x.exhibitor}`;
 
         div.onclick = () => {
-
             const el = document.querySelector(`[data-id='${x.members[0]}']`);
             if (!el) return;
 
             el.scrollIntoView({ behavior: "smooth", block: "center" });
-
             el.classList.add("highlight", "blink");
 
             setTimeout(() => el.classList.remove("blink"), 5000);
