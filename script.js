@@ -9,37 +9,52 @@ const panelContent = document.getElementById("panelContent");
 
 let allData = [];
 let zoomLevel = 1;
-let chartInstance = null;
 
-/* CLEAN */
+/* =========================
+   CLEAN TEXT
+========================= */
 function cleanText(val) {
     if (!val) return "";
-    return String(val).replace(/\s+/g, " ").trim();
+    return String(val)
+        .replace(/\u00A0/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
 }
 
-/* NORMALIZE */
+/* =========================
+   NORMALIZE ID (FOR MATCHING)
+========================= */
 function normalizeId(id) {
-    return String(id || "").replace(/\s+/g, "").toLowerCase();
+    return String(id || "")
+        .replace(/\u00A0/g, "")
+        .replace(/\s+/g, "")
+        .toLowerCase();
 }
 
-/* DISPLAY */
-function formatDisplayId(id) {
-    return id.replace(/-([a-z])$/, (_, c) => "-" + c.toUpperCase());
+/* =========================
+   FORMAT DISPLAY (5079-a → 5079-A)
+========================= */
+function formatBooth(id) {
+    return String(id).toUpperCase();
 }
 
-/* STATUS */
-function getStatusFromSheet(row) {
-    let s = cleanText(row.status).toLowerCase();
+/* =========================
+   STATUS (STRICT FROM SHEET)
+========================= */
+function getStatus(row) {
+    const s = cleanText(row.status).toLowerCase();
 
     if (s === "available") return "available";
     if (s === "booked") return "booked";
     if (s === "sold") return "sold";
     if (s.includes("agent")) return "agent";
 
-    return "available";
+    return "available"; // no guessing anymore
 }
 
-/* LOAD DATA */
+/* =========================
+   LOAD DATA
+========================= */
 async function loadData() {
     const res = await fetch(`${G_SCRIPT_URL}?cmd=read&t=${Date.now()}`);
     const raw = await res.json();
@@ -52,11 +67,13 @@ async function loadData() {
         const booths = String(row.boothid).split(",");
 
         booths.forEach(id => {
+            const cleanId = normalizeId(id);
+
             expanded.push({
-                boothid: normalizeId(id),
-                status: getStatusFromSheet(row),
-                exhibitor: cleanText(row.exhibitor),
-                size: Number(row.size) || 0
+                boothid: cleanId,
+                label: formatBooth(id.trim()),
+                status: getStatus(row),
+                exhibitor: cleanText(row.exhibitor)
             });
         });
     });
@@ -65,24 +82,20 @@ async function loadData() {
     renderFloor();
 }
 
-/* VARIANTS */
-function getVariants(baseId) {
-    return allData.filter(x =>
-        x.boothid.startsWith(normalizeId(baseId) + "-")
-    );
-}
-
-/* HALL CONFIG */
+/* =========================
+   HALL CONFIG
+========================= */
 const hallConfig = [
-  {name:"Hall 5", start:5001, end:5078},
+  {name:"Hall 5", start:5001, end:5079},
   {name:"Hall 6", start:6001, end:6189},
   {name:"Hall 7", start:7001, end:7196},
   {name:"Hall 8", start:8001, end:8181},
-  {name:"Hall 9", start:9001, end:9191},
-  {name:"Hall 10", start:1001, end:1151}
+  {name:"Hall 9", start:9001, end:9191}
 ];
 
-/* RENDER FLOOR */
+/* =========================
+   RENDER FLOOR
+========================= */
 function renderFloor() {
     floor.innerHTML = "";
 
@@ -99,32 +112,49 @@ function renderFloor() {
         grid.className = "grid";
 
         for (let i = hall.start; i <= hall.end; i++) {
-
-            const baseId = String(i);
-            const variants = getVariants(baseId);
-
-            if (variants.length > 0) {
-                variants.forEach(v => grid.appendChild(createBooth(v.boothid)));
-            } else {
-                grid.appendChild(createBooth(baseId));
-            }
+            grid.appendChild(createBooth(String(i)));
         }
 
         hallDiv.appendChild(grid);
         floor.appendChild(hallDiv);
     });
+
+    // 🔥 also render suffix booths (like 5079-A)
+    renderSuffixBooths();
 }
 
-/* CREATE BOOTH */
+/* =========================
+   RENDER SUFFIX BOOTHS
+========================= */
+function renderSuffixBooths() {
+    allData.forEach(row => {
+
+        // detect suffix (example: 5079-a)
+        if (!row.boothid.match(/[0-9]+-[a-z]/)) return;
+
+        const base = row.boothid.split("-")[0];
+        const el = document.querySelector(`[data-id='${base}']`);
+
+        if (!el) return;
+
+        const clone = el.cloneNode(true);
+
+        clone.innerText = formatBooth(row.label);
+        clone.dataset.id = row.boothid;
+        clone.className = "booth " + row.status;
+
+        clone.onclick = () => openPanel(row);
+
+        el.parentNode.insertBefore(clone, el.nextSibling);
+    });
+}
+
+/* =========================
+   CREATE BOOTH
+========================= */
 function createBooth(id) {
 
     const norm = normalizeId(id);
-    const display = formatDisplayId(id);
-
-    const b = document.createElement("div");
-    b.className = "booth available";
-    b.innerText = display;
-    b.dataset.id = norm;
 
     const matches = allData.filter(x => x.boothid === norm);
 
@@ -139,109 +169,48 @@ function createBooth(id) {
         exhibitor = matches.map(x => x.exhibitor).filter(Boolean).join(", ");
     }
 
+    const b = document.createElement("div");
     b.className = "booth " + status;
-    b.dataset.tooltip = `${display} • ${status.toUpperCase()} ${exhibitor}`;
+    b.innerText = formatBooth(id);
+    b.dataset.id = norm;
 
-    b.onclick = (e) => {
-        e.stopPropagation();
+    b.dataset.tooltip = `${status.toUpperCase()} ${exhibitor ? "• " + exhibitor : ""}`;
 
-        panel.classList.remove("hidden");
-        panelContent.innerHTML = `
-            <b>Booth:</b> ${display}<br>
-            <b>Status:</b> ${status.toUpperCase()}<br>
-            <b>Size:</b> ${matches[0]?.size || 0} sqm<br>
-            <b>Exhibitor:</b> ${exhibitor || "-"}
-        `;
+    b.onclick = () => {
+        openPanel({
+            boothid: norm,
+            label: formatBooth(id),
+            status,
+            exhibitor
+        });
     };
 
     return b;
 }
 
-/* REPORT */
-function generateReport() {
-    const report = {};
-
-    allData.forEach(x => {
-        const hall = getHall(x.boothid);
-
-        if (!report[hall]) {
-            report[hall] = {available:0, sold:0, booked:0, agent:0, size:0};
-        }
-
-        report[hall][x.status]++;
-        report[hall].size += x.size;
-    });
-
-    return report;
-}
-
-/* HALL DETECT */
-function getHall(id) {
-    const n = parseInt(id);
-    if (n >= 5000 && n < 6000) return "Hall 5";
-    if (n >= 6000 && n < 7000) return "Hall 6";
-    if (n >= 7000 && n < 8000) return "Hall 7";
-    if (n >= 8000 && n < 9000) return "Hall 8";
-    if (n >= 9000 && n < 10000) return "Hall 9";
-    if (n >= 1000 && n < 2000) return "Hall 10";
-    return "Other";
-}
-
-/* SHOW REPORT + CHART */
-function showReport() {
-
-    const data = generateReport();
-
-    let html = `<h3>📊 Hall Report</h3><canvas id="chartCanvas"></canvas><hr>`;
-
-    Object.keys(data).forEach(hall => {
-        const h = data[hall];
-
-        html += `
-        <div>
-            <b>${hall}</b><br>
-            A:${h.available} | S:${h.sold} | B:${h.booked} | AG:${h.agent}<br>
-            Size: ${h.size} sqm
-        </div><br>`;
-    });
-
+/* =========================
+   PANEL
+========================= */
+function openPanel(data) {
     panel.classList.remove("hidden");
-    panelContent.innerHTML = html;
 
-    renderChart(data);
+    panelContent.innerHTML = `
+        <b>Booth:</b> ${data.label}<br>
+        <b>Status:</b> ${data.status.toUpperCase()}<br>
+        <b>Exhibitor:</b> ${data.exhibitor || "-"}
+    `;
 }
 
-/* CHART */
-function renderChart(data) {
-
-    const ctx = document.getElementById("chartCanvas");
-
-    const labels = Object.keys(data);
-
-    if (chartInstance) chartInstance.destroy();
-
-    chartInstance = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels,
-            datasets: [
-                { label: 'Available', data: labels.map(h=>data[h].available), backgroundColor:'#3b82f6' },
-                { label: 'Sold', data: labels.map(h=>data[h].sold), backgroundColor:'#ef4444' },
-                { label: 'Booked', data: labels.map(h=>data[h].booked), backgroundColor:'#eab308' },
-                { label: 'Agent', data: labels.map(h=>data[h].agent), backgroundColor:'#22c55e' }
-            ]
-        }
-    });
-}
-
-/* SEARCH */
+/* =========================
+   SEARCH + BLINK
+========================= */
 searchBox.addEventListener("input", () => {
 
     const val = searchBox.value.toLowerCase();
 
     const result = allData.filter(x =>
         x.boothid.includes(val) ||
-        x.exhibitor.toLowerCase().includes(val)
+        (x.exhibitor || "").toLowerCase().includes(val)
     );
 
     suggestions.innerHTML = "";
@@ -251,23 +220,21 @@ searchBox.addEventListener("input", () => {
 
         const div = document.createElement("div");
         div.className = "suggestionItem";
-        div.innerText = `${formatDisplayId(x.boothid)} - ${x.exhibitor}`;
+        div.innerText = `${x.label} - ${x.exhibitor}`;
 
         div.onclick = () => {
+
             const el = document.querySelector(`[data-id='${x.boothid}']`);
+            if (!el) return;
 
-            if (el) {
-                el.scrollIntoView({ behavior: "smooth", block: "center" });
+            el.scrollIntoView({ behavior: "smooth", block: "center" });
 
-                el.classList.add("highlight","blink");
+            el.classList.add("highlight", "blink");
 
-                setTimeout(() => {
-                    el.classList.remove("highlight","blink");
-                }, 5000);
+            setTimeout(() => el.classList.remove("blink"), 5000);
+            setTimeout(() => el.classList.remove("highlight"), 6000);
 
-                el.click();
-            }
-
+            el.click();
             suggestions.style.display = "none";
         };
 
@@ -275,16 +242,48 @@ searchBox.addEventListener("input", () => {
     });
 });
 
-/* BUTTON */
-document.getElementById("reportBtn").onclick = (e) => {
-    e.stopPropagation();
-    showReport();
+/* =========================
+   DRAG (FIXED)
+========================= */
+let isDown = false, startX, startY, scrollLeft, scrollTop;
+
+container.addEventListener("mousedown", (e) => {
+    isDown = true;
+    startX = e.pageX;
+    startY = e.pageY;
+    scrollLeft = container.scrollLeft;
+    scrollTop = container.scrollTop;
+});
+
+document.addEventListener("mouseup", () => isDown = false);
+
+document.addEventListener("mousemove", (e) => {
+    if (!isDown) return;
+
+    container.scrollLeft = scrollLeft - (e.pageX - startX);
+    container.scrollTop = scrollTop - (e.pageY - startY);
+});
+
+/* =========================
+   ZOOM
+========================= */
+document.getElementById("zoomIn").onclick = () => {
+    zoomLevel += 0.1;
+    floor.style.transform = `scale(${zoomLevel})`;
 };
 
-/* CLOSE */
+document.getElementById("zoomOut").onclick = () => {
+    zoomLevel = Math.max(0.3, zoomLevel - 0.1);
+    floor.style.transform = `scale(${zoomLevel})`;
+};
+
+/* =========================
+   CLOSE
+========================= */
 document.addEventListener("click", () => {
     panel.classList.add("hidden");
     suggestions.style.display = "none";
 });
 
+/* INIT */
 loadData();
