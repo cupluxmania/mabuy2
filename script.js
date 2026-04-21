@@ -10,6 +10,31 @@ const panelContent = document.getElementById("panelContent");
 let allData = [];
 let zoomLevel = 1;
 
+/* =========================
+   🔥 CORE STATUS LOGIC
+========================= */
+function getStatus(text) {
+    if (!text || !text.trim()) return "available";
+
+    const lower = text.toLowerCase();
+
+    if (lower.includes("agent")) return "agent";
+
+    const hasUppercase = text !== text.toLowerCase();
+    if (hasUppercase) return "sold";
+
+    return "booked";
+}
+
+function getColor(status){
+    return {
+        available:"#3b82f6",
+        sold:"#ef4444",
+        booked:"#eab308",
+        agent:"#22c55e"
+    }[status];
+}
+
 /* NORMALIZE */
 function normalizeId(id) {
     return String(id).replace(/\s+/g, "").toLowerCase();
@@ -36,32 +61,21 @@ async function loadData() {
 
         booths.forEach(id => {
 
-            let rawStatus = (row.status || "").toLowerCase();
-            let helper = (row.helper || "").toLowerCase();
-            let exhibitor = (row.exhibitor || "").toLowerCase();
-
-            // 🔥 AGENT DETECTION
-            let isAgent =
-                rawStatus.includes("agent") ||
-                helper.includes("agent") ||
-                exhibitor.includes("agent");
-
-            let status = "available";
-
-            if (isAgent) status = "agent";
-            else if (rawStatus === "booked") status = "sold";
-            else if (rawStatus === "plotting") status = "booked";
+            const textSource = [
+                row.status || "",
+                row.helper || "",
+                row.exhibitor || ""
+            ].join(" ").trim();
 
             expanded.push({
                 boothid: id.trim(),
-                status: status,
+                status: getStatus(textSource),
                 exhibitor: (row.exhibitor || "").trim()
             });
         });
     });
 
     allData = expanded;
-
     renderFloor();
 }
 
@@ -123,15 +137,23 @@ function createBooth(id) {
     b.innerText = id;
     b.dataset.id = id;
 
-    const d = allData.find(x => normalizeId(x.boothid) === normalizeId(id));
+    const matches = allData.filter(x => normalizeId(x.boothid) === normalizeId(id));
 
-    if (d) {
-        b.className = "booth " + d.status;
-        b.dataset.tooltip = d.exhibitor || d.status;
-        b.dataset.name = d.exhibitor;
-    } else {
-        b.dataset.tooltip = "Available";
+    let finalStatus = "available";
+    let exhibitorName = "";
+
+    if (matches.length) {
+
+        if (matches.some(x => x.status === "agent")) finalStatus = "agent";
+        else if (matches.some(x => x.status === "sold")) finalStatus = "sold";
+        else if (matches.some(x => x.status === "booked")) finalStatus = "booked";
+
+        exhibitorName = matches.map(x => x.exhibitor).filter(Boolean).join(", ");
     }
+
+    b.className = "booth " + finalStatus;
+    b.dataset.tooltip = `${finalStatus.toUpperCase()} ${exhibitorName ? "• " + exhibitorName : ""}`;
+    b.dataset.name = exhibitorName;
 
     b.onclick = (e) => {
         e.stopPropagation();
@@ -139,8 +161,8 @@ function createBooth(id) {
         panel.classList.remove("hidden");
         panelContent.innerHTML = `
             <b>Booth:</b> ${id}<br>
-            <b>Status:</b> ${b.className.replace('booth ', '')}<br>
-            <b>Exhibitor:</b> ${b.dataset.name || "-"}
+            <b>Status:</b> <span style="color:${getColor(finalStatus)}">${finalStatus.toUpperCase()}</span><br>
+            <b>Exhibitor:</b> ${exhibitorName || "-"}
         `;
     };
 
@@ -169,10 +191,21 @@ searchBox.addEventListener("input", () => {
         div.onclick = () => {
             const el = document.querySelector(`[data-id='${x.boothid}']`);
             if (el) {
-                el.scrollIntoView({ behavior: "smooth", block: "center" });
 
-                el.classList.add("highlight");
-                setTimeout(() => el.classList.remove("highlight"), 4000);
+                const rect = el.getBoundingClientRect();
+                const parentRect = container.getBoundingClientRect();
+
+                container.scrollTo({
+                    left: container.scrollLeft + (rect.left - parentRect.left) - parentRect.width / 2 + rect.width / 2,
+                    top: container.scrollTop + (rect.top - parentRect.top) - parentRect.height / 2 + rect.height / 2,
+                    behavior: "smooth"
+                });
+
+                el.classList.add("highlight", "blink");
+
+                setTimeout(() => {
+                    el.classList.remove("highlight", "blink");
+                }, 5000);
 
                 el.click();
             }
@@ -188,19 +221,24 @@ let isDown = false, startX, startY, scrollLeft, scrollTop;
 
 container.addEventListener("mousedown", (e) => {
     isDown = true;
-    startX = e.pageX;
-    startY = e.pageY;
+    startX = e.pageX - container.offsetLeft;
+    startY = e.pageY - container.offsetTop;
     scrollLeft = container.scrollLeft;
     scrollTop = container.scrollTop;
 });
 
-container.addEventListener("mouseup", () => isDown = false);
 container.addEventListener("mouseleave", () => isDown = false);
+container.addEventListener("mouseup", () => isDown = false);
 
 container.addEventListener("mousemove", (e) => {
     if (!isDown) return;
-    container.scrollLeft = scrollLeft - (e.pageX - startX);
-    container.scrollTop = scrollTop - (e.pageY - startY);
+    e.preventDefault();
+
+    const x = e.pageX - container.offsetLeft;
+    const y = e.pageY - container.offsetTop;
+
+    container.scrollLeft = scrollLeft - (x - startX);
+    container.scrollTop = scrollTop - (y - startY);
 });
 
 /* ZOOM */
