@@ -6,40 +6,35 @@ const searchBox = document.getElementById("searchBox");
 const suggestions = document.getElementById("suggestions");
 const panel = document.getElementById("sidePanel");
 const panelContent = document.getElementById("panelContent");
+const reportBtn = document.getElementById("reportBtn");
 
 let allData = [];
 let zoomLevel = 1;
 
 /* =========================
-   CLEAN TEXT
+   CLEAN
 ========================= */
 function cleanText(val) {
     if (!val) return "";
-    return String(val)
-        .replace(/\u00A0/g, " ")
-        .replace(/\s+/g, " ")
-        .trim();
+    return String(val).replace(/\s+/g, " ").trim();
 }
 
 /* =========================
-   NORMALIZE ID (FOR MATCHING)
+   NORMALIZE
 ========================= */
 function normalizeId(id) {
-    return String(id || "")
-        .replace(/\u00A0/g, "")
-        .replace(/\s+/g, "")
-        .toLowerCase();
+    return String(id || "").replace(/\s+/g, "").toLowerCase();
 }
 
 /* =========================
-   FORMAT DISPLAY (5079-a → 5079-A)
+   FORMAT DISPLAY
 ========================= */
 function formatBooth(id) {
     return String(id).toUpperCase();
 }
 
 /* =========================
-   STATUS (STRICT FROM SHEET)
+   STATUS (STRICT)
 ========================= */
 function getStatus(row) {
     const s = cleanText(row.status).toLowerCase();
@@ -49,7 +44,7 @@ function getStatus(row) {
     if (s === "sold") return "sold";
     if (s.includes("agent")) return "agent";
 
-    return "available"; // no guessing anymore
+    return "available";
 }
 
 /* =========================
@@ -64,13 +59,9 @@ async function loadData() {
     raw.forEach(row => {
         if (!row.boothid) return;
 
-        const booths = String(row.boothid).split(",");
-
-        booths.forEach(id => {
-            const cleanId = normalizeId(id);
-
+        String(row.boothid).split(",").forEach(id => {
             expanded.push({
-                boothid: cleanId,
+                boothid: normalizeId(id),
                 label: formatBooth(id.trim()),
                 status: getStatus(row),
                 exhibitor: cleanText(row.exhibitor)
@@ -118,35 +109,6 @@ function renderFloor() {
         hallDiv.appendChild(grid);
         floor.appendChild(hallDiv);
     });
-
-    // 🔥 also render suffix booths (like 5079-A)
-    renderSuffixBooths();
-}
-
-/* =========================
-   RENDER SUFFIX BOOTHS
-========================= */
-function renderSuffixBooths() {
-    allData.forEach(row => {
-
-        // detect suffix (example: 5079-a)
-        if (!row.boothid.match(/[0-9]+-[a-z]/)) return;
-
-        const base = row.boothid.split("-")[0];
-        const el = document.querySelector(`[data-id='${base}']`);
-
-        if (!el) return;
-
-        const clone = el.cloneNode(true);
-
-        clone.innerText = formatBooth(row.label);
-        clone.dataset.id = row.boothid;
-        clone.className = "booth " + row.status;
-
-        clone.onclick = () => openPanel(row);
-
-        el.parentNode.insertBefore(clone, el.nextSibling);
-    });
 }
 
 /* =========================
@@ -155,7 +117,6 @@ function renderSuffixBooths() {
 function createBooth(id) {
 
     const norm = normalizeId(id);
-
     const matches = allData.filter(x => x.boothid === norm);
 
     let status = "available";
@@ -176,29 +137,19 @@ function createBooth(id) {
 
     b.dataset.tooltip = `${status.toUpperCase()} ${exhibitor ? "• " + exhibitor : ""}`;
 
-    b.onclick = () => {
-        openPanel({
-            boothid: norm,
-            label: formatBooth(id),
-            status,
-            exhibitor
-        });
+    b.onclick = (e) => {
+        e.stopPropagation(); // 🔥 IMPORTANT FIX
+
+        panel.classList.remove("hidden");
+
+        panelContent.innerHTML = `
+            <b>Booth:</b> ${formatBooth(id)}<br>
+            <b>Status:</b> ${status.toUpperCase()}<br>
+            <b>Exhibitor:</b> ${exhibitor || "-"}
+        `;
     };
 
     return b;
-}
-
-/* =========================
-   PANEL
-========================= */
-function openPanel(data) {
-    panel.classList.remove("hidden");
-
-    panelContent.innerHTML = `
-        <b>Booth:</b> ${data.label}<br>
-        <b>Status:</b> ${data.status.toUpperCase()}<br>
-        <b>Exhibitor:</b> ${data.exhibitor || "-"}
-    `;
 }
 
 /* =========================
@@ -243,7 +194,37 @@ searchBox.addEventListener("input", () => {
 });
 
 /* =========================
-   DRAG (FIXED)
+   REPORT (WORKING)
+========================= */
+reportBtn.onclick = (e) => {
+    e.stopPropagation(); // 🔥 prevent panel close
+
+    const summary = {
+        available: 0,
+        sold: 0,
+        booked: 0,
+        agent: 0
+    };
+
+    allData.forEach(x => {
+        if (summary[x.status] !== undefined) {
+            summary[x.status]++;
+        }
+    });
+
+    panel.classList.remove("hidden");
+
+    panelContent.innerHTML = `
+        <h3>📊 Summary</h3>
+        Available: ${summary.available}<br>
+        Sold: ${summary.sold}<br>
+        Booked: ${summary.booked}<br>
+        Agent: ${summary.agent}
+    `;
+};
+
+/* =========================
+   DRAG
 ========================= */
 let isDown = false, startX, startY, scrollLeft, scrollTop;
 
@@ -278,11 +259,13 @@ document.getElementById("zoomOut").onclick = () => {
 };
 
 /* =========================
-   CLOSE
+   CLOSE PANEL FIX
 ========================= */
-document.addEventListener("click", () => {
-    panel.classList.add("hidden");
-    suggestions.style.display = "none";
+document.addEventListener("click", (e) => {
+    if (!panel.contains(e.target) && !e.target.closest(".booth") && !e.target.closest("#reportBtn")) {
+        panel.classList.add("hidden");
+        suggestions.style.display = "none";
+    }
 });
 
 /* INIT */
