@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hospital Expo Floorplan</title>
     <link rel="stylesheet" href="style.css">
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 
@@ -27,6 +30,7 @@
     <div id="menu">
         <button id="zoomIn">Zoom In +</button>
         <button id="zoomOut">Zoom Out -</button>
+        <button id="reportBtn">📊 Report</button>
         <span id="zoomLevel">100%</span>
     </div>
 
@@ -37,7 +41,7 @@
 </div>
 
 <div id="sidePanel" class="hidden">
-    <h3>Booth Info</h3>
+    <h3>Panel</h3>
     <div id="panelContent"></div>
 </div>
 
