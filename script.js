@@ -28,12 +28,17 @@ function format(val) {
 }
 
 /* =========================
-   HALL DETECTOR
+   HALL DETECTOR (FIXED)
 ========================= */
 function getHall(id) {
-    const num = parseInt(id);
 
-    if (!isNaN(num)) {
+    const str = String(id);
+
+    // pure number only
+    const isPureNumber = /^\d+$/.test(str);
+    const num = isPureNumber ? Number(str) : null;
+
+    if (num !== null) {
         if (num >= 5000 && num < 6000) return "Hall 5";
         if (num >= 6000 && num < 7000) return "Hall 6";
         if (num >= 7000 && num < 8000) return "Hall 7";
@@ -42,7 +47,23 @@ function getHall(id) {
         if (num >= 1000 && num < 2000) return "Hall 10";
     }
 
-    if (/^[a-zA-Z]$/.test(id)) return "Ambulance";
+    if (/^[a-zA-Z]$/.test(str)) return "Ambulance";
+
+    // handle 5035-A type
+    if (str.includes("-")) {
+        const base = str.split("-")[0];
+
+        if (/^\d+$/.test(base)) {
+            const n = Number(base);
+
+            if (n >= 5000 && n < 6000) return "Hall 5";
+            if (n >= 6000 && n < 7000) return "Hall 6";
+            if (n >= 7000 && n < 8000) return "Hall 7";
+            if (n >= 8000 && n < 9000) return "Hall 8";
+            if (n >= 9000 && n < 10000) return "Hall 9";
+            if (n >= 1000 && n < 2000) return "Hall 10";
+        }
+    }
 
     return "Other";
 }
@@ -74,12 +95,12 @@ async function loadData() {
         if (!row.boothid) return;
 
         String(row.boothid).split(",").forEach(id => {
-            const cleanId = id.trim();
+            const cleanId = String(id).trim();
 
             temp.push({
-                rawId: cleanId,              // ✅ KEEP ORIGINAL (5035-A)
-                keyId: normalize(cleanId),  // ✅ FOR MATCHING ONLY
-                label: cleanId,             // ✅ DISPLAY
+                rawId: cleanId,
+                keyId: normalize(cleanId),
+                label: cleanId,
                 status: getStatus(row),
                 exhibitor: clean(row.exhibitor),
                 size: Number(row.size || row.sqm || 0),
@@ -162,9 +183,7 @@ function createBooth(id) {
     const b = document.createElement("div");
     b.className = "booth " + status;
 
-    // ✅ FIX: show original format (5035-A works now)
     b.innerText = id;
-
     b.dataset.id = key;
 
     b.dataset.tooltip = size
@@ -228,7 +247,7 @@ searchBox.addEventListener("input", () => {
 });
 
 /* =========================
-   REPORT
+   REPORT (UNCHANGED)
 ========================= */
 reportBtn.onclick = (e) => {
     e.stopPropagation();
@@ -297,7 +316,7 @@ reportBtn.onclick = (e) => {
 };
 
 /* =========================
-   DRAG
+   DRAG + ZOOM + CLOSE (UNCHANGED)
 ========================= */
 let isDown = false, startX, startY, scrollLeft, scrollTop;
 
@@ -318,9 +337,6 @@ document.addEventListener("mousemove", (e) => {
     container.scrollTop = scrollTop - (e.pageY - startY);
 });
 
-/* =========================
-   ZOOM
-========================= */
 document.getElementById("zoomIn").onclick = () => {
     zoomLevel += 0.1;
     floor.style.transform = `scale(${zoomLevel})`;
@@ -331,9 +347,6 @@ document.getElementById("zoomOut").onclick = () => {
     floor.style.transform = `scale(${zoomLevel})`;
 };
 
-/* =========================
-   CLOSE
-========================= */
 document.addEventListener("click", (e) => {
     if (!panel.contains(e.target) && !e.target.closest(".booth")) {
         panel.classList.add("hidden");
