@@ -12,7 +12,7 @@ let allData = [];
 let zoomLevel = 1;
 
 /* =========================
-   UTIL
+   CLEAN
 ========================= */
 function clean(val) {
     if (!val) return "";
@@ -34,52 +34,56 @@ function getStatus(row) {
 }
 
 /* =========================
-   GROUP PARSER (SAFE)
-   - keeps -A / -B intact
-   - supports numeric ranges
+   GROUP PARSER (FINAL FIX)
 ========================= */
 function parseGroup(id) {
 
     id = String(id).trim();
 
-    // normal booth
-    if (!id.includes("-")) {
+    // CASE 1: LETTER SUFFIX → NEVER SPLIT
+    // 5035-A / 5035-B
+    if (id.includes("-") && /[a-zA-Z]/.test(id.split("-")[1])) {
         return {
+            type: "suffix",
             groupId: id,
             members: [id]
         };
     }
 
-    const parts = id.split("-").map(x => x.trim());
+    // CASE 2: NUMERIC RANGE → SPLIT
+    // 5003-5004-5005
+    if (id.includes("-") && /^\d/.test(id)) {
 
-    // numeric range: 5003-5004-5005
-    if (parts.every(p => /^\d+$/.test(p))) {
+        const parts = id.split("-").map(x => x.trim());
 
-        const start = Number(parts[0]);
-        const end = Number(parts[parts.length - 1]);
+        if (parts.every(p => /^\d+$/.test(p))) {
 
-        const members = [];
-        for (let i = start; i <= end; i++) {
-            members.push(String(i));
+            const start = Number(parts[0]);
+            const end = Number(parts[parts.length - 1]);
+
+            const members = [];
+            for (let i = start; i <= end; i++) {
+                members.push(String(i));
+            }
+
+            return {
+                type: "range",
+                groupId: id,
+                members
+            };
         }
-
-        return {
-            groupId: id,
-            members
-        };
     }
 
-    // IMPORTANT: -A / -B stays grouped, NOT split into fake data
+    // CASE 3: SINGLE
     return {
+        type: "single",
         groupId: id,
-        members: parts
+        members: [id]
     };
 }
 
 /* =========================
-   LOAD DATA (FIXED)
-   - NO data duplication
-   - NO breaking -A/-B
+   LOAD DATA
 ========================= */
 async function loadData() {
     const res = await fetch(`${G_SCRIPT_URL}?cmd=read&t=${Date.now()}`);
@@ -90,13 +94,13 @@ async function loadData() {
     raw.forEach(row => {
         if (!row.boothid) return;
 
-        String(row.boothid).split(",").forEach(group => {
+        String(row.boothid).split(",").forEach(id => {
 
-            const parsed = parseGroup(group);
+            const parsed = parseGroup(id);
 
-            // IMPORTANT: store 1 record per group ONLY
             temp.push({
                 groupId: parsed.groupId,
+                type: parsed.type,
                 members: parsed.members,
                 status: getStatus(row),
                 exhibitor: clean(row.exhibitor),
@@ -111,7 +115,7 @@ async function loadData() {
 }
 
 /* =========================
-   FIND GROUP BY BOOTH
+   FIND GROUP
 ========================= */
 function findGroup(id) {
     return allData.find(g => g.members.includes(id));
@@ -131,7 +135,7 @@ const hallConfig = [
 ];
 
 /* =========================
-   RENDER FLOOR
+   RENDER
 ========================= */
 function renderFloor() {
     floor.innerHTML = "";
@@ -164,7 +168,7 @@ function renderFloor() {
 }
 
 /* =========================
-   CREATE BOOTH (FIXED)
+   CREATE BOOTH (FIXED LOGIC)
 ========================= */
 function createBooth(id) {
 
@@ -176,18 +180,20 @@ function createBooth(id) {
 
     if (group) {
 
-        const members = group.members;
-
         if (group.status === "agent") status = "agent";
         else if (group.status === "sold") status = "sold";
         else if (group.status === "booked") status = "booked";
 
         exhibitor = group.exhibitor;
 
-        // 🔥 AUTO SPLIT (DISPLAY ONLY)
-        size = members.length > 1
-            ? Math.round(group.size / members.length)
-            : group.size;
+        // 🔥 SIZE RULES
+        if (group.type === "range") {
+            // JOINED BOOTH → SPLIT SIZE
+            size = Math.round(group.size / group.members.length);
+        } else {
+            // suffix or single → NO SPLIT
+            size = group.size;
+        }
     }
 
     const b = document.createElement("div");
