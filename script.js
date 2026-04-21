@@ -43,7 +43,7 @@ function normalizeId(id) {
 }
 
 /* =========================
-   🔍 FALLBACK ANALYZER (ONLY IF STATUS EMPTY)
+   🔍 FALLBACK ANALYZER
 ========================= */
 function analyzeStatus(text) {
 
@@ -61,7 +61,7 @@ function analyzeStatus(text) {
 }
 
 /* =========================
-   🎯 STATUS FROM SHEET (MAIN SOURCE)
+   🎯 STATUS FROM SHEET
 ========================= */
 function getStatusFromSheet(row) {
 
@@ -72,7 +72,6 @@ function getStatusFromSheet(row) {
     if (status === "sold") return "sold";
     if (status.includes("agent")) return "agent";
 
-    // 🔁 fallback only if empty or invalid
     const fallbackText = [
         cleanText(row.helper),
         cleanText(row.exhibitor)
@@ -112,11 +111,7 @@ async function loadData() {
             expanded.push({
                 boothid: boothIdClean,
                 status: finalStatus,
-                exhibitor: cleanText(row.exhibitor),
-                debug: {
-                    raw: row.status,
-                    reason: "FROM SHEET"
-                }
+                exhibitor: cleanText(row.exhibitor)
             });
         });
     });
@@ -215,7 +210,7 @@ function createBooth(id) {
 }
 
 /* =========================
-   SEARCH
+   SEARCH (🔥 FIXED)
 ========================= */
 searchBox.addEventListener("input", () => {
 
@@ -237,10 +232,31 @@ searchBox.addEventListener("input", () => {
 
         div.onclick = () => {
             const el = document.querySelector(`[data-id='${x.boothid}']`);
+
             if (el) {
-                el.scrollIntoView({ behavior: "smooth", block: "center" });
+
+                el.scrollIntoView({
+                    behavior: "smooth",
+                    block: "center",
+                    inline: "center"
+                });
+
+                // 🔥 CLEAR OLD
+                document.querySelectorAll(".highlight, .blink").forEach(b => {
+                    b.classList.remove("highlight", "blink");
+                });
+
+                // 🔥 APPLY EFFECT
+                el.classList.add("highlight", "blink");
+
+                // ⏱ REMOVE AFTER 5s
+                setTimeout(() => {
+                    el.classList.remove("highlight", "blink");
+                }, 5000);
+
                 el.click();
             }
+
             suggestions.style.display = "none";
         };
 
