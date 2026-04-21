@@ -12,32 +12,47 @@ let allData = [];
 let zoomLevel = 1;
 
 /* =========================
-   CLEAN
+   UTIL
 ========================= */
-function cleanText(val) {
+function clean(val) {
     if (!val) return "";
     return String(val).replace(/\s+/g, " ").trim();
 }
 
-/* =========================
-   NORMALIZE
-========================= */
-function normalizeId(id) {
+function normalize(id) {
     return String(id || "").replace(/\s+/g, "").toLowerCase();
 }
 
-/* =========================
-   FORMAT DISPLAY
-========================= */
-function formatBooth(id) {
+function format(id) {
     return String(id).toUpperCase();
 }
 
 /* =========================
-   STATUS (STRICT)
+   HALL DETECTOR
+========================= */
+function getHall(id) {
+    const num = parseInt(id);
+
+    if (!isNaN(num)) {
+        if (num >= 5000 && num < 6000) return "Hall 5";
+        if (num >= 6000 && num < 7000) return "Hall 6";
+        if (num >= 7000 && num < 8000) return "Hall 7";
+        if (num >= 8000 && num < 9000) return "Hall 8";
+        if (num >= 9000 && num < 10000) return "Hall 9";
+        if (num >= 1000 && num < 2000) return "Hall 10";
+    }
+
+    // letters → ambulance
+    if (/^[a-zA-Z]$/.test(id)) return "Ambulance";
+
+    return "Other";
+}
+
+/* =========================
+   STATUS
 ========================= */
 function getStatus(row) {
-    const s = cleanText(row.status).toLowerCase();
+    const s = clean(row.status).toLowerCase();
 
     if (s === "available") return "available";
     if (s === "booked") return "booked";
@@ -54,56 +69,68 @@ async function loadData() {
     const res = await fetch(`${G_SCRIPT_URL}?cmd=read&t=${Date.now()}`);
     const raw = await res.json();
 
-    const expanded = [];
+    const temp = [];
 
     raw.forEach(row => {
         if (!row.boothid) return;
 
         String(row.boothid).split(",").forEach(id => {
-            expanded.push({
-                boothid: normalizeId(id),
-                label: formatBooth(id.trim()),
+            const cleanId = id.trim();
+
+            temp.push({
+                boothid: normalize(cleanId),
+                label: format(cleanId),
                 status: getStatus(row),
-                exhibitor: cleanText(row.exhibitor)
+                exhibitor: clean(row.exhibitor),
+                size: Number(row.sqm || row.size || 0),
+                hall: getHall(cleanId)
             });
         });
     });
 
-    allData = expanded;
+    allData = temp;
     renderFloor();
 }
 
 /* =========================
-   HALL CONFIG
+   HALL CONFIG (RESTORED)
 ========================= */
 const hallConfig = [
   {name:"Hall 5", start:5001, end:5079},
   {name:"Hall 6", start:6001, end:6189},
   {name:"Hall 7", start:7001, end:7196},
   {name:"Hall 8", start:8001, end:8181},
-  {name:"Hall 9", start:9001, end:9191}
+  {name:"Hall 9", start:9001, end:9191},
+  {name:"Hall 10", start:1001, end:1151},
+  {name:"Ambulance", start:"A", end:"Z"}
 ];
 
 /* =========================
-   RENDER FLOOR
+   RENDER
 ========================= */
 function renderFloor() {
     floor.innerHTML = "";
 
-    hallConfig.forEach(hall => {
+    hallConfig.forEach(h => {
 
         const hallDiv = document.createElement("div");
         hallDiv.className = "hall";
 
         const title = document.createElement("h3");
-        title.innerText = hall.name;
+        title.innerText = h.name;
         hallDiv.appendChild(title);
 
         const grid = document.createElement("div");
         grid.className = "grid";
 
-        for (let i = hall.start; i <= hall.end; i++) {
-            grid.appendChild(createBooth(String(i)));
+        if (h.name === "Ambulance") {
+            for (let i = 65; i <= 90; i++) {
+                grid.appendChild(createBooth(String.fromCharCode(i)));
+            }
+        } else {
+            for (let i = h.start; i <= h.end; i++) {
+                grid.appendChild(createBooth(String(i)));
+            }
         }
 
         hallDiv.appendChild(grid);
@@ -116,11 +143,12 @@ function renderFloor() {
 ========================= */
 function createBooth(id) {
 
-    const norm = normalizeId(id);
+    const norm = normalize(id);
     const matches = allData.filter(x => x.boothid === norm);
 
     let status = "available";
     let exhibitor = "";
+    let size = 0;
 
     if (matches.length) {
         if (matches.some(x => x.status === "agent")) status = "agent";
@@ -128,24 +156,25 @@ function createBooth(id) {
         else if (matches.some(x => x.status === "booked")) status = "booked";
 
         exhibitor = matches.map(x => x.exhibitor).filter(Boolean).join(", ");
+        size = matches.reduce((sum, x) => sum + x.size, 0);
     }
 
     const b = document.createElement("div");
     b.className = "booth " + status;
-    b.innerText = formatBooth(id);
+    b.innerText = format(id);
     b.dataset.id = norm;
 
-    b.dataset.tooltip = `${status.toUpperCase()} ${exhibitor ? "• " + exhibitor : ""}`;
+    b.dataset.tooltip = `${status.toUpperCase()} • ${size} sqm`;
 
     b.onclick = (e) => {
-        e.stopPropagation(); // 🔥 IMPORTANT FIX
+        e.stopPropagation();
 
         panel.classList.remove("hidden");
-
         panelContent.innerHTML = `
-            <b>Booth:</b> ${formatBooth(id)}<br>
+            <b>Booth:</b> ${format(id)}<br>
             <b>Status:</b> ${status.toUpperCase()}<br>
-            <b>Exhibitor:</b> ${exhibitor || "-"}
+            <b>Exhibitor:</b> ${exhibitor || "-"}<br>
+            <b>Size:</b> ${size}
         `;
     };
 
@@ -153,74 +182,72 @@ function createBooth(id) {
 }
 
 /* =========================
-   SEARCH + BLINK
-========================= */
-searchBox.addEventListener("input", () => {
-
-    const val = searchBox.value.toLowerCase();
-
-    const result = allData.filter(x =>
-        x.boothid.includes(val) ||
-        (x.exhibitor || "").toLowerCase().includes(val)
-    );
-
-    suggestions.innerHTML = "";
-    suggestions.style.display = result.length ? "block" : "none";
-
-    result.forEach(x => {
-
-        const div = document.createElement("div");
-        div.className = "suggestionItem";
-        div.innerText = `${x.label} - ${x.exhibitor}`;
-
-        div.onclick = () => {
-
-            const el = document.querySelector(`[data-id='${x.boothid}']`);
-            if (!el) return;
-
-            el.scrollIntoView({ behavior: "smooth", block: "center" });
-
-            el.classList.add("highlight", "blink");
-
-            setTimeout(() => el.classList.remove("blink"), 5000);
-            setTimeout(() => el.classList.remove("highlight"), 6000);
-
-            el.click();
-            suggestions.style.display = "none";
-        };
-
-        suggestions.appendChild(div);
-    });
-});
-
-/* =========================
-   REPORT (WORKING)
+   REPORT (ALL HALLS)
 ========================= */
 reportBtn.onclick = (e) => {
-    e.stopPropagation(); // 🔥 prevent panel close
+    e.stopPropagation();
 
     const summary = {
+        total: 0,
         available: 0,
         sold: 0,
         booked: 0,
-        agent: 0
+        agent: 0,
+        size: 0
     };
 
+    const hallReport = {};
+
     allData.forEach(x => {
-        if (summary[x.status] !== undefined) {
-            summary[x.status]++;
+
+        summary.total++;
+        summary[x.status]++;
+        summary.size += x.size;
+
+        if (!hallReport[x.hall]) {
+            hallReport[x.hall] = {
+                total: 0,
+                available: 0,
+                sold: 0,
+                booked: 0,
+                agent: 0,
+                size: 0
+            };
         }
+
+        hallReport[x.hall].total++;
+        hallReport[x.hall][x.status]++;
+        hallReport[x.hall].size += x.size;
     });
 
-    panel.classList.remove("hidden");
-
-    panelContent.innerHTML = `
-        <h3>📊 Summary</h3>
+    let html = `
+        <h3>📊 OVERALL</h3>
+        Booth: ${summary.total}<br>
         Available: ${summary.available}<br>
         Sold: ${summary.sold}<br>
         Booked: ${summary.booked}<br>
-        Agent: ${summary.agent}
+        Agent: ${summary.agent}<br>
+        Total Size: ${summary.size}
+        <hr>
     `;
+
+    Object.keys(hallReport).forEach(h => {
+        const r = hallReport[h];
+
+        html += `
+            <b>${h}</b><br>
+            Booth: ${r.total}<br>
+            Available: ${r.available}<br>
+            Sold: ${r.sold}<br>
+            Booked: ${r.booked}<br>
+            Agent: ${r.agent}<br>
+            Total Size: ${r.size}
+            <hr>
+        `;
+    });
+
+    panel.classList.remove("hidden");
+    panelContent.innerHTML = html;
 };
 
 /* =========================
@@ -259,10 +286,10 @@ document.getElementById("zoomOut").onclick = () => {
 };
 
 /* =========================
-   CLOSE PANEL FIX
+   CLOSE
 ========================= */
 document.addEventListener("click", (e) => {
-    if (!panel.contains(e.target) && !e.target.closest(".booth") && !e.target.closest("#reportBtn")) {
+    if (!panel.contains(e.target) && !e.target.closest(".booth")) {
         panel.classList.add("hidden");
         suggestions.style.display = "none";
     }
