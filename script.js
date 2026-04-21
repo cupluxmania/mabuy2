@@ -6,14 +6,15 @@ const searchBox = document.getElementById("searchBox");
 const suggestions = document.getElementById("suggestions");
 const panel = document.getElementById("sidePanel");
 const panelContent = document.getElementById("panelContent");
+const reportBtn = document.getElementById("reportBtn");
 
 let allData = [];
 
 /* =========================
-   CLEAN (NO ID MODIFICATION)
+   CLEAN SAFE
 ========================= */
-function clean(val) {
-    return val ? String(val).replace(/\s+/g, " ").trim() : "";
+function clean(v) {
+    return v ? String(v).replace(/\s+/g, " ").trim() : "";
 }
 
 /* =========================
@@ -31,7 +32,7 @@ function getStatus(row) {
 }
 
 /* =========================
-   BOOTH PARSER
+   BOOTH PARSER (SAFE SPLIT ONLY)
 ========================= */
 function parseBooths(raw) {
 
@@ -40,33 +41,29 @@ function parseBooths(raw) {
     // comma group
     if (id.includes(",")) {
         return {
-            type: "group",
             list: id.split(",").map(x => x.trim())
         };
     }
 
-    // range group (5001-5002)
+    // numeric range group
     if (id.includes("-") && /^\d/.test(id)) {
         const [a, b] = id.split("-").map(Number);
 
         if (!isNaN(a) && !isNaN(b)) {
             const list = [];
-            for (let i = a; i <= b; i++) {
-                list.push(String(i));
-            }
-            return { type: "group", list };
+            for (let i = a; i <= b; i++) list.push(String(i));
+            return { list };
         }
     }
 
-    // IMPORTANT: suffix booth stays RAW (5035-A)
+    // IMPORTANT: suffix booth stays RAW (5035-A untouched)
     return {
-        type: "single",
         list: [id]
     };
 }
 
 /* =========================
-   LOAD DATA (SAFE + RAW ID ONLY)
+   LOAD DATA (NO ID CHANGE)
 ========================= */
 async function loadData() {
 
@@ -80,13 +77,13 @@ async function loadData() {
             if (!row.boothid) return;
 
             const group = parseBooths(row.boothid);
-
             const totalSize = Number(row.size || row.sqm || 9);
             const perSize = totalSize / group.list.length;
 
             group.list.forEach(id => {
+
                 temp.push({
-                    boothid: id, // 🔥 RAW ID ONLY (NO NORMALIZE)
+                    boothid: String(id), // 🔥 ABSOLUTE RAW STRING ONLY
                     status: getStatus(row),
                     exhibitor: clean(row.exhibitor),
                     size: perSize
@@ -98,7 +95,7 @@ async function loadData() {
         renderFloor();
 
     } catch (err) {
-        console.error("DB ERROR:", err);
+        console.error("DATABASE ERROR:", err);
     }
 }
 
@@ -106,7 +103,7 @@ async function loadData() {
    FIND (STRICT MATCH ONLY)
 ========================= */
 function find(id) {
-    return allData.filter(x => x.boothid === id);
+    return allData.filter(x => String(x.boothid) === String(id));
 }
 
 /* =========================
@@ -145,12 +142,14 @@ function renderFloor() {
 
         const make = (id) => {
 
-            if (processed.has(id)) return;
-            processed.add(id);
+            const key = String(id);
 
-            const data = find(id)[0];
+            if (processed.has(key)) return;
+            processed.add(key);
 
-            grid.appendChild(createBooth(id, data));
+            const data = find(key)[0];
+
+            grid.appendChild(createBooth(key, data));
         };
 
         if (h.name === "Ambulance") {
@@ -181,7 +180,9 @@ function createBooth(id, data) {
 
     b.className = "booth " + status;
 
-    b.innerText = id; // 🔥 ALWAYS RAW DISPLAY (5035-A stays 5035-A)
+    // 🔥 RAW DISPLAY ONLY (5035-A NEVER CHANGED)
+    b.innerText = id;
+
     b.dataset.id = id;
 
     b.dataset.tooltip = `${status.toUpperCase()} • [ ${size} sqm ]`;
@@ -202,7 +203,7 @@ function createBooth(id, data) {
 }
 
 /* =========================
-   SEARCH (RAW SAFE MATCH)
+   SEARCH (SAFE RAW MATCH)
 ========================= */
 searchBox.addEventListener("input", () => {
 
@@ -243,7 +244,7 @@ searchBox.addEventListener("input", () => {
 });
 
 /* =========================
-   DRAG (STABLE FIX)
+   DRAG FIX (STABLE)
 ========================= */
 let isDown = false, startX, startY, scrollLeft, scrollTop;
 
@@ -270,6 +271,80 @@ document.addEventListener("mousemove", (e) => {
     container.scrollLeft = scrollLeft - (e.clientX - startX);
     container.scrollTop = scrollTop - (e.clientY - startY);
 });
+
+/* =========================
+   REPORT (FULL FIXED)
+========================= */
+reportBtn.onclick = (e) => {
+    e.stopPropagation();
+
+    const summary = {
+        total: 0,
+        available: 0,
+        sold: 0,
+        booked: 0,
+        agent: 0,
+        size: 0
+    };
+
+    const hallReport = {};
+
+    allData.forEach(x => {
+
+        const status = x.status || "available";
+        const hall = x.hall || "Unknown";
+        const size = Number(x.size || 0);
+
+        summary.total++;
+        summary[status] = (summary[status] || 0) + 1;
+        summary.size += size;
+
+        if (!hallReport[hall]) {
+            hallReport[hall] = {
+                total: 0,
+                available: 0,
+                sold: 0,
+                booked: 0,
+                agent: 0,
+                size: 0
+            };
+        }
+
+        hallReport[hall].total++;
+        hallReport[hall][status] = (hallReport[hall][status] || 0) + 1;
+        hallReport[hall].size += size;
+    });
+
+    let html = `
+        <h3>📊 OVERALL</h3>
+        Total Booth: ${summary.total}<br>
+        Available: ${summary.available || 0}<br>
+        Sold: ${summary.sold || 0}<br>
+        Booked: ${summary.booked || 0}<br>
+        Agent: ${summary.agent || 0}<br>
+        Total Size: ${summary.size}
+        <hr>
+    `;
+
+    Object.keys(hallReport).forEach(h => {
+
+        const r = hallReport[h];
+
+        html += `
+            <b>${h}</b><br>
+            Total: ${r.total}<br>
+            Available: ${r.available || 0}<br>
+            Sold: ${r.sold || 0}<br>
+            Booked: ${r.booked || 0}<br>
+            Agent: ${r.agent || 0}<br>
+            Size: ${r.size}
+            <hr>
+        `;
+    });
+
+    panel.classList.remove("hidden");
+    panelContent.innerHTML = html;
+};
 
 /* INIT */
 loadData();
