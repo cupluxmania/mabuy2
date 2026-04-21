@@ -9,41 +9,63 @@ const panelContent = document.getElementById("panelContent");
 
 let allData = [];
 let zoomLevel = 1;
+let DEBUG = false;
 
 /* =========================
-   🔥 CORE STATUS LOGIC (FINAL FIX)
+   🧼 AUTO CLEANER
 ========================= */
-function getStatus(text) {
-    if (!text) return "available";
+function cleanText(val) {
+    if (!val) return "";
 
-    const raw = String(text);
+    let text = String(val)
+        .replace(/\u00A0/g, " ")        // remove non-breaking space
+        .replace(/\s+/g, " ")          // normalize spaces
+        .trim();
 
-    // CLEAN TEXT (remove spaces, line breaks)
-    const cleaned = raw.replace(/\s+/g, "").toLowerCase();
+    const lower = text.toLowerCase();
 
-    // EMPTY / INVALID VALUES
-    if (cleaned === "" || cleaned === "-" || cleaned === "n/a" || cleaned === "null") {
-        return "available";
+    // normalize useless values
+    if (["-", "n/a", "na", "null", "undefined"].includes(lower)) {
+        return "";
     }
 
-    const lower = raw.toLowerCase();
+    return text;
+}
 
-    // PRIORITY 1: AGENT
-    if (lower.includes("agent")) return "agent";
+/* =========================
+   🔥 STATUS LOGIC (CLEAN INPUT)
+========================= */
+function analyzeStatus(text) {
 
-    // 🔥 CHECK IF TEXT HAS LETTERS
-    const hasLetters = /[a-zA-Z]/.test(raw);
+    const raw = cleanText(text);
+    const compact = raw.replace(/\s+/g, "");
 
-    if (hasLetters) {
-        // ANY uppercase letter → SOLD
-        if (/[A-Z]/.test(raw)) return "sold";
+    let status = "available";
+    let reason = "";
 
-        // all lowercase letters → BOOKED
-        return "booked";
+    if (!compact) {
+        status = "available";
+        reason = "EMPTY";
+    }
+    else if (raw.toLowerCase().includes("agent")) {
+        status = "agent";
+        reason = "AGENT";
+    }
+    else if (/[a-zA-Z]/.test(raw)) {
+        if (/[A-Z]/.test(raw)) {
+            status = "sold";
+            reason = "UPPERCASE";
+        } else {
+            status = "booked";
+            reason = "LOWERCASE";
+        }
+    }
+    else {
+        status = "available";
+        reason = "NUMERIC";
     }
 
-    // 🔥 NO LETTERS (numbers only) → AVAILABLE
-    return "available";
+    return { status, reason, raw };
 }
 
 function getColor(status){
@@ -57,14 +79,7 @@ function getColor(status){
 
 /* NORMALIZE */
 function normalizeId(id) {
-    return String(id).replace(/\s+/g, "").toLowerCase();
-}
-
-/* GET VARIANTS */
-function getVariants(baseId) {
-    return allData.filter(x =>
-        normalizeId(x.boothid).startsWith(normalizeId(baseId) + "-")
-    );
+    return cleanText(id).replace(/\s+/g, "").toLowerCase();
 }
 
 /* LOAD DATA */
@@ -81,16 +96,23 @@ async function loadData() {
 
         booths.forEach(id => {
 
+            const cleanedStatus = cleanText(row.status);
+            const cleanedHelper = cleanText(row.helper);
+            const cleanedExhibitor = cleanText(row.exhibitor);
+
             const textSource = [
-                row.status || "",
-                row.helper || "",
-                row.exhibitor || ""
-            ].join(" ").trim();
+                cleanedStatus,
+                cleanedHelper,
+                cleanedExhibitor
+            ].join(" ");
+
+            const analysis = analyzeStatus(textSource);
 
             expanded.push({
-                boothid: id.trim(),
-                status: getStatus(textSource),
-                exhibitor: (row.exhibitor || "").trim()
+                boothid: cleanText(id),
+                status: analysis.status,
+                exhibitor: cleanedExhibitor,
+                debug: analysis
             });
         });
     });
@@ -132,15 +154,7 @@ function renderFloor() {
             }
         } else {
             for (let i = hall.start; i <= hall.end; i++) {
-
-                const baseId = String(i);
-                const variants = getVariants(baseId);
-
-                if (variants.length > 0) {
-                    variants.forEach(v => grid.appendChild(createBooth(v.boothid)));
-                } else {
-                    grid.appendChild(createBooth(baseId));
-                }
+                grid.appendChild(createBooth(String(i)));
             }
         }
 
@@ -161,6 +175,7 @@ function createBooth(id) {
 
     let finalStatus = "available";
     let exhibitorName = "";
+    let debugInfo = [];
 
     if (matches.length) {
 
@@ -169,11 +184,16 @@ function createBooth(id) {
         else if (matches.some(x => x.status === "booked")) finalStatus = "booked";
 
         exhibitorName = matches.map(x => x.exhibitor).filter(Boolean).join(", ");
+        debugInfo = matches.map(x => x.debug);
     }
 
     b.className = "booth " + finalStatus;
-    b.dataset.tooltip = `${finalStatus.toUpperCase()} ${exhibitorName ? "• " + exhibitorName : ""}`;
-    b.dataset.name = exhibitorName;
+
+    if (DEBUG && debugInfo.length) {
+        b.dataset.tooltip = debugInfo.map(d => `${d.raw} → ${d.reason}`).join(" | ");
+    } else {
+        b.dataset.tooltip = `${finalStatus.toUpperCase()} ${exhibitorName ? "• " + exhibitorName : ""}`;
+    }
 
     b.onclick = (e) => {
         e.stopPropagation();
@@ -182,7 +202,8 @@ function createBooth(id) {
         panelContent.innerHTML = `
             <b>Booth:</b> ${id}<br>
             <b>Status:</b> <span style="color:${getColor(finalStatus)}">${finalStatus.toUpperCase()}</span><br>
-            <b>Exhibitor:</b> ${exhibitorName || "-"}
+            <b>Exhibitor:</b> ${exhibitorName || "-"}<br>
+            ${DEBUG ? `<hr>${debugInfo.map(d => `<div>${d.raw} → ${d.reason}</div>`).join("")}` : ""}
         `;
     };
 
@@ -211,22 +232,7 @@ searchBox.addEventListener("input", () => {
         div.onclick = () => {
             const el = document.querySelector(`[data-id='${x.boothid}']`);
             if (el) {
-
-                const rect = el.getBoundingClientRect();
-                const parentRect = container.getBoundingClientRect();
-
-                container.scrollTo({
-                    left: container.scrollLeft + (rect.left - parentRect.left) - parentRect.width / 2 + rect.width / 2,
-                    top: container.scrollTop + (rect.top - parentRect.top) - parentRect.height / 2 + rect.height / 2,
-                    behavior: "smooth"
-                });
-
-                el.classList.add("highlight", "blink");
-
-                setTimeout(() => {
-                    el.classList.remove("highlight", "blink");
-                }, 5000);
-
+                el.scrollIntoView({ behavior: "smooth", block: "center" });
                 el.click();
             }
             suggestions.style.display = "none";
@@ -236,29 +242,33 @@ searchBox.addEventListener("input", () => {
     });
 });
 
+/* DEBUG TOGGLE */
+document.addEventListener("keydown", (e) => {
+    if (e.key === "d") {
+        DEBUG = !DEBUG;
+        renderFloor();
+        alert("DEBUG MODE: " + (DEBUG ? "ON" : "OFF"));
+    }
+});
+
 /* DRAG */
 let isDown = false, startX, startY, scrollLeft, scrollTop;
 
 container.addEventListener("mousedown", (e) => {
     isDown = true;
-    startX = e.pageX - container.offsetLeft;
-    startY = e.pageY - container.offsetTop;
+    startX = e.pageX;
+    startY = e.pageY;
     scrollLeft = container.scrollLeft;
     scrollTop = container.scrollTop;
 });
 
-container.addEventListener("mouseleave", () => isDown = false);
 container.addEventListener("mouseup", () => isDown = false);
+container.addEventListener("mouseleave", () => isDown = false);
 
 container.addEventListener("mousemove", (e) => {
     if (!isDown) return;
-    e.preventDefault();
-
-    const x = e.pageX - container.offsetLeft;
-    const y = e.pageY - container.offsetTop;
-
-    container.scrollLeft = scrollLeft - (x - startX);
-    container.scrollTop = scrollTop - (y - startY);
+    container.scrollLeft = scrollLeft - (e.pageX - startX);
+    container.scrollTop = scrollTop - (e.pageY - startY);
 });
 
 /* ZOOM */
