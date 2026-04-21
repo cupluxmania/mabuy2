@@ -9,88 +9,37 @@ const panelContent = document.getElementById("panelContent");
 
 let allData = [];
 let zoomLevel = 1;
+let chartInstance = null;
 
-/* =========================
-   🧼 CLEAN TEXT
-========================= */
+/* CLEAN */
 function cleanText(val) {
     if (!val) return "";
-
-    let text = String(val)
-        .replace(/\u00A0/g, " ")
-        .replace(/\s+/g, " ")
-        .trim();
-
-    const lower = text.toLowerCase();
-
-    if (["-", "n/a", "na", "null", "undefined"].includes(lower)) {
-        return "";
-    }
-
-    return text;
+    return String(val).replace(/\s+/g, " ").trim();
 }
 
-/* =========================
-   🔥 NORMALIZE ID
-========================= */
+/* NORMALIZE */
 function normalizeId(id) {
-    return String(id || "")
-        .replace(/\u00A0/g, "")
-        .replace(/\s+/g, "")
-        .trim()
-        .toLowerCase();
+    return String(id || "").replace(/\s+/g, "").toLowerCase();
 }
 
-/* =========================
-   🔍 FALLBACK ANALYZER
-========================= */
-function analyzeStatus(text) {
+/* DISPLAY FORMAT */
+function formatDisplayId(id) {
+    return id.replace(/-([a-z])$/, (_, c) => "-" + c.toUpperCase());
+}
 
-    const raw = cleanText(text);
+/* STATUS */
+function getStatusFromSheet(row) {
+    let s = cleanText(row.status).toLowerCase();
 
-    if (!raw) return "available";
-
-    if (raw.toLowerCase().includes("agent")) return "agent";
-
-    if (/[a-zA-Z]/.test(raw)) {
-        return /[A-Z]/.test(raw) ? "sold" : "booked";
-    }
+    if (s === "available") return "available";
+    if (s === "booked") return "booked";
+    if (s === "sold") return "sold";
+    if (s.includes("agent")) return "agent";
 
     return "available";
 }
 
-/* =========================
-   🎯 STATUS FROM SHEET
-========================= */
-function getStatusFromSheet(row) {
-
-    let status = cleanText(row.status).toLowerCase();
-
-    if (status === "available") return "available";
-    if (status === "booked") return "booked";
-    if (status === "sold") return "sold";
-    if (status.includes("agent")) return "agent";
-
-    const fallbackText = [
-        cleanText(row.helper),
-        cleanText(row.exhibitor)
-    ].join(" ");
-
-    return analyzeStatus(fallbackText);
-}
-
-function getColor(status){
-    return {
-        available:"#3b82f6",
-        sold:"#ef4444",
-        booked:"#eab308",
-        agent:"#22c55e"
-    }[status];
-}
-
-/* =========================
-   LOAD DATA
-========================= */
+/* LOAD DATA */
 async function loadData() {
     const res = await fetch(`${G_SCRIPT_URL}?cmd=read&t=${Date.now()}`);
     const raw = await res.json();
@@ -103,14 +52,11 @@ async function loadData() {
         const booths = String(row.boothid).split(",");
 
         booths.forEach(id => {
-
-            const boothIdClean = normalizeId(id);
-            const finalStatus = getStatusFromSheet(row);
-
             expanded.push({
-                boothid: boothIdClean,
-                status: finalStatus,
-                exhibitor: cleanText(row.exhibitor)
+                boothid: normalizeId(id),
+                status: getStatusFromSheet(row),
+                exhibitor: cleanText(row.exhibitor),
+                size: Number(row.size) || 0
             });
         });
     });
@@ -119,140 +65,156 @@ async function loadData() {
     renderFloor();
 }
 
-/* =========================
-   GET VARIANTS (-A/-B)
-========================= */
-function getVariants(baseId) {
-    return allData.filter(x =>
-        normalizeId(x.boothid).startsWith(normalizeId(baseId) + "-")
-    );
+/* HALL DETECT */
+function getHall(id) {
+    const n = parseInt(id);
+    if (n >= 5000 && n < 6000) return "Hall 5";
+    if (n >= 6000 && n < 7000) return "Hall 6";
+    if (n >= 7000 && n < 8000) return "Hall 7";
+    if (n >= 8000 && n < 9000) return "Hall 8";
+    if (n >= 9000 && n < 10000) return "Hall 9";
+    if (n >= 1000 && n < 2000) return "Hall 10";
+    return "Other";
 }
 
-/* =========================
-   FORMAT DISPLAY ID (🔥 NEW)
-========================= */
-function formatDisplayId(id) {
-    return id.replace(/-([a-z])$/, (_, c) => "-" + c.toUpperCase());
-}
+/* REPORT DATA */
+function generateReport() {
+    const report = {};
 
-/* =========================
-   HALL CONFIG
-========================= */
-const hallConfig = [
-  {name:"Hall 5", start:5001, end:5078},
-  {name:"Hall 6", start:6001, end:6189},
-  {name:"Hall 7", start:7001, end:7196},
-  {name:"Hall 8", start:8001, end:8181},
-  {name:"Hall 9", start:9001, end:9191},
-  {name:"Hall 10", start:1001, end:1151},
-  {name:"Ambulance", start:"A", end:"Z"}
-];
+    allData.forEach(x => {
+        const hall = getHall(x.boothid);
 
-/* =========================
-   RENDER
-========================= */
-function renderFloor() {
-    floor.innerHTML = "";
-
-    hallConfig.forEach(hall => {
-
-        const hallDiv = document.createElement("div");
-        hallDiv.className = "hall";
-
-        const title = document.createElement("h3");
-        title.innerText = hall.name;
-        hallDiv.appendChild(title);
-
-        const grid = document.createElement("div");
-        grid.className = "grid";
-
-        if (hall.name === "Ambulance") {
-            for (let i = 65; i <= 90; i++) {
-                grid.appendChild(createBooth(String.fromCharCode(i)));
-            }
-        } else {
-            for (let i = hall.start; i <= hall.end; i++) {
-
-                const baseId = String(i);
-                const variants = getVariants(baseId);
-
-                if (variants.length > 0) {
-                    variants.forEach(v => {
-                        grid.appendChild(createBooth(v.boothid));
-                    });
-                } else {
-                    grid.appendChild(createBooth(baseId));
-                }
-            }
+        if (!report[hall]) {
+            report[hall] = {available:0, sold:0, booked:0, agent:0, size:0};
         }
 
-        hallDiv.appendChild(grid);
-        floor.appendChild(hallDiv);
+        report[hall][x.status]++;
+        report[hall].size += x.size;
+    });
+
+    return report;
+}
+
+/* SHOW REPORT + CHART */
+function showReport() {
+
+    const data = generateReport();
+
+    let html = `
+        <h3>📊 Hall Report</h3>
+        <canvas id="chartCanvas" height="200"></canvas>
+        <hr>
+    `;
+
+    Object.keys(data).forEach(hall => {
+        const h = data[hall];
+
+        html += `
+        <div style="margin-bottom:12px">
+            <b>${hall}</b><br>
+            Available: ${h.available} |
+            Sold: ${h.sold} |
+            Booked: ${h.booked} |
+            Agent: ${h.agent}<br>
+            <b>Total Size: ${h.size} sqm</b>
+        </div>
+        `;
+    });
+
+    panel.classList.remove("hidden");
+    panelContent.innerHTML = html;
+
+    renderChart(data);
+}
+
+/* CHART */
+function renderChart(data) {
+
+    const ctx = document.getElementById("chartCanvas");
+
+    const labels = Object.keys(data);
+    const available = labels.map(h => data[h].available);
+    const sold = labels.map(h => data[h].sold);
+    const booked = labels.map(h => data[h].booked);
+    const agent = labels.map(h => data[h].agent);
+
+    if (chartInstance) chartInstance.destroy();
+
+    chartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                { label: 'Available', data: available, backgroundColor: '#3b82f6' },
+                { label: 'Sold', data: sold, backgroundColor: '#ef4444' },
+                { label: 'Booked', data: booked, backgroundColor: '#eab308' },
+                { label: 'Agent', data: agent, backgroundColor: '#22c55e' }
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'top' }
+            }
+        }
     });
 }
 
-/* =========================
-   CREATE BOOTH
-========================= */
+/* CREATE BOOTH */
 function createBooth(id) {
 
-    const normId = normalizeId(id);
-    const displayId = formatDisplayId(id);
+    const norm = normalizeId(id);
+    const display = formatDisplayId(id);
 
     const b = document.createElement("div");
     b.className = "booth available";
-    b.innerText = displayId;
-    b.dataset.id = normId;
+    b.innerText = display;
+    b.dataset.id = norm;
 
-    const matches = allData.filter(x => x.boothid === normId);
+    const match = allData.find(x => x.boothid === norm);
 
-    let finalStatus = "available";
-    let exhibitorName = "";
-
-    if (matches.length) {
-
-        if (matches.some(x => x.status === "agent")) finalStatus = "agent";
-        else if (matches.some(x => x.status === "sold")) finalStatus = "sold";
-        else if (matches.some(x => x.status === "booked")) finalStatus = "booked";
-
-        exhibitorName = matches.map(x => x.exhibitor).filter(Boolean).join(", ");
+    if (match) {
+        b.className = "booth " + match.status;
+        b.dataset.tooltip = `${display} • ${match.status.toUpperCase()} • ${match.exhibitor}`;
     }
-
-    b.className = "booth " + finalStatus;
-
-    b.dataset.tooltip = `${displayId} • ${finalStatus.toUpperCase()}${exhibitorName ? " • " + exhibitorName : ""}`;
 
     b.onclick = (e) => {
         e.stopPropagation();
 
         panel.classList.remove("hidden");
         panelContent.innerHTML = `
-            <b>Booth:</b> ${displayId}<br>
-            <b>Status:</b> <span style="color:${getColor(finalStatus)}">${finalStatus.toUpperCase()}</span><br>
-            <b>Exhibitor:</b> ${exhibitorName || "-"}
+            <b>Booth:</b> ${display}<br>
+            <b>Status:</b> ${match?.status || "available"}<br>
+            <b>Size:</b> ${match?.size || 0} sqm<br>
+            <b>Exhibitor:</b> ${match?.exhibitor || "-"}
         `;
     };
 
     return b;
 }
 
-/* =========================
-   SEARCH
-========================= */
-searchBox.addEventListener("input", () => {
+/* RENDER */
+function renderFloor() {
+    floor.innerHTML = "";
 
+    for (let i = 5001; i <= 5078; i++) {
+        floor.appendChild(createBooth(String(i)));
+    }
+}
+
+/* SEARCH */
+searchBox.addEventListener("input", () => {
     const val = searchBox.value.toLowerCase();
 
     const result = allData.filter(x =>
         x.boothid.includes(val) ||
-        (x.exhibitor || "").toLowerCase().includes(val)
+        x.exhibitor.toLowerCase().includes(val)
     );
 
     suggestions.innerHTML = "";
     suggestions.style.display = result.length ? "block" : "none";
 
     result.forEach(x => {
-
         const div = document.createElement("div");
         div.className = "suggestionItem";
         div.innerText = `${formatDisplayId(x.boothid)} - ${x.exhibitor}`;
@@ -261,21 +223,12 @@ searchBox.addEventListener("input", () => {
             const el = document.querySelector(`[data-id='${x.boothid}']`);
 
             if (el) {
+                el.scrollIntoView({ behavior: "smooth", block: "center" });
 
-                el.scrollIntoView({
-                    behavior: "smooth",
-                    block: "center",
-                    inline: "center"
-                });
-
-                document.querySelectorAll(".highlight, .blink").forEach(b => {
-                    b.classList.remove("highlight", "blink");
-                });
-
-                el.classList.add("highlight", "blink");
+                el.classList.add("highlight","blink");
 
                 setTimeout(() => {
-                    el.classList.remove("highlight", "blink");
+                    el.classList.remove("highlight","blink");
                 }, 5000);
 
                 el.click();
@@ -288,46 +241,10 @@ searchBox.addEventListener("input", () => {
     });
 });
 
-/* =========================
-   DRAG
-========================= */
-let isDown = false, startX, startY, scrollLeft, scrollTop;
-
-container.addEventListener("mousedown", (e) => {
-    isDown = true;
-    startX = e.pageX;
-    startY = e.pageY;
-    scrollLeft = container.scrollLeft;
-    scrollTop = container.scrollTop;
-});
-
-container.addEventListener("mouseup", () => isDown = false);
-container.addEventListener("mouseleave", () => isDown = false);
-
-container.addEventListener("mousemove", (e) => {
-    if (!isDown) return;
-    container.scrollLeft = scrollLeft - (e.pageX - startX);
-    container.scrollTop = scrollTop - (e.pageY - startY);
-});
-
-/* =========================
-   ZOOM
-========================= */
-document.getElementById("zoomIn").onclick = () => {
-    zoomLevel += 0.1;
-    floor.style.transform = `scale(${zoomLevel})`;
+/* BUTTON */
+document.getElementById("reportBtn").onclick = (e) => {
+    e.stopPropagation();
+    showReport();
 };
-document.getElementById("zoomOut").onclick = () => {
-    zoomLevel = Math.max(0.3, zoomLevel - 0.1);
-    floor.style.transform = `scale(${zoomLevel})`;
-};
-
-/* =========================
-   CLOSE
-========================= */
-document.addEventListener("click", () => {
-    panel.classList.add("hidden");
-    suggestions.style.display = "none";
-});
 
 loadData();
