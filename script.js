@@ -42,7 +42,6 @@ function getHall(id) {
         if (num >= 1000 && num < 2000) return "Hall 10";
     }
 
-    // letters → ambulance
     if (/^[a-zA-Z]$/.test(id)) return "Ambulance";
 
     return "Other";
@@ -82,7 +81,7 @@ async function loadData() {
                 label: format(cleanId),
                 status: getStatus(row),
                 exhibitor: clean(row.exhibitor),
-                size: Number(row.sqm || row.size || 0),
+                size: Number(row.size || row.sqm || 0),
                 hall: getHall(cleanId)
             });
         });
@@ -93,7 +92,7 @@ async function loadData() {
 }
 
 /* =========================
-   HALL CONFIG (RESTORED)
+   HALL CONFIG
 ========================= */
 const hallConfig = [
   {name:"Hall 5", start:5001, end:5079},
@@ -164,7 +163,10 @@ function createBooth(id) {
     b.innerText = format(id);
     b.dataset.id = norm;
 
-    b.dataset.tooltip = `${status.toUpperCase()} • ${size} sqm`;
+    // ✅ TOOLTIP FORMAT UPDATED
+    b.dataset.tooltip = size
+        ? `${status.toUpperCase()} • [ ${size} sqm ]`
+        : `${status.toUpperCase()} • [ - ]`;
 
     b.onclick = (e) => {
         e.stopPropagation();
@@ -174,7 +176,7 @@ function createBooth(id) {
             <b>Booth:</b> ${format(id)}<br>
             <b>Status:</b> ${status.toUpperCase()}<br>
             <b>Exhibitor:</b> ${exhibitor || "-"}<br>
-            <b>Size:</b> ${size}
+            <b>Size:</b> ${size || "-"}
         `;
     };
 
@@ -182,7 +184,48 @@ function createBooth(id) {
 }
 
 /* =========================
-   REPORT (ALL HALLS)
+   SEARCH
+========================= */
+searchBox.addEventListener("input", () => {
+
+    const val = searchBox.value.toLowerCase();
+
+    const result = allData.filter(x =>
+        x.boothid.includes(val) ||
+        (x.exhibitor || "").toLowerCase().includes(val)
+    );
+
+    suggestions.innerHTML = "";
+    suggestions.style.display = result.length ? "block" : "none";
+
+    result.forEach(x => {
+
+        const div = document.createElement("div");
+        div.className = "suggestionItem";
+        div.innerText = `${x.label} - ${x.exhibitor}`;
+
+        div.onclick = () => {
+
+            const el = document.querySelector(`[data-id='${x.boothid}']`);
+            if (!el) return;
+
+            el.scrollIntoView({ behavior: "smooth", block: "center" });
+
+            el.classList.add("highlight", "blink");
+
+            setTimeout(() => el.classList.remove("blink"), 5000);
+            setTimeout(() => el.classList.remove("highlight"), 6000);
+
+            el.click();
+            suggestions.style.display = "none";
+        };
+
+        suggestions.appendChild(div);
+    });
+});
+
+/* =========================
+   REPORT
 ========================= */
 reportBtn.onclick = (e) => {
     e.stopPropagation();
