@@ -11,18 +11,29 @@ let allData = [];
 let zoomLevel = 1;
 
 /* =========================
-   🔥 CORE STATUS LOGIC
+   🔥 CORE STATUS LOGIC (FIXED)
 ========================= */
 function getStatus(text) {
-    if (!text || !text.trim()) return "available";
+    if (!text) return "available";
+
+    // 🔥 CLEAN TEXT (remove spaces, line breaks, etc.)
+    const cleaned = text.replace(/\s+/g, "").toLowerCase();
+
+    // TRUE EMPTY OR USELESS VALUES
+    if (cleaned === "" || cleaned === "-" || cleaned === "n/a" || cleaned === "null") {
+        return "available";
+    }
 
     const lower = text.toLowerCase();
 
+    // PRIORITY 1: AGENT
     if (lower.includes("agent")) return "agent";
 
+    // PRIORITY 2: ANY UPPERCASE → SOLD
     const hasUppercase = text !== text.toLowerCase();
     if (hasUppercase) return "sold";
 
+    // PRIORITY 3: ALL LOWERCASE → BOOKED
     return "booked";
 }
 
