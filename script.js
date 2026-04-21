@@ -34,6 +34,48 @@ function getStatus(row) {
 }
 
 /* =========================
+   GROUP DETECTOR (ADVANCED)
+========================= */
+function parseBoothGroup(rawId) {
+
+    const id = String(rawId).trim();
+
+    // single booth
+    if (!id.includes("-")) {
+        return {
+            groupId: id,
+            members: [id]
+        };
+    }
+
+    const parts = id.split("-").map(x => x.trim());
+
+    // numeric range: 5003-5004-5005
+    if (parts.every(p => /^\d+$/.test(p))) {
+
+        const start = Number(parts[0]);
+        const end = Number(parts[parts.length - 1]);
+
+        const members = [];
+
+        for (let i = start; i <= end; i++) {
+            members.push(String(i));
+        }
+
+        return {
+            groupId: id,
+            members
+        };
+    }
+
+    // fallback (non numeric)
+    return {
+        groupId: id,
+        members: parts
+    };
+}
+
+/* =========================
    LOAD DATA
 ========================= */
 async function loadData() {
@@ -47,14 +89,20 @@ async function loadData() {
 
         String(row.boothid).split(",").forEach(id => {
 
-            const cleanId = String(id).trim(); // ✅ KEEP RAW EXACT
+            const parsed = parseBoothGroup(id);
 
-            temp.push({
-                boothid: cleanId,          // ✅ RAW ONLY (NO NORMALIZE)
-                status: getStatus(row),
-                exhibitor: clean(row.exhibitor),
-                size: Number(row.size || row.sqm || 0)
+            parsed.members.forEach(member => {
+
+                temp.push({
+                    boothid: String(member).trim(),
+                    groupId: parsed.groupId,
+                    status: getStatus(row),
+                    exhibitor: clean(row.exhibitor),
+                    size: Number(row.size || row.sqm || 0)
+                });
+
             });
+
         });
     });
 
@@ -74,22 +122,6 @@ const hallConfig = [
   {name:"Hall 10", start:1001, end:1151},
   {name:"Ambulance", start:"A", end:"Z"}
 ];
-
-/* =========================
-   VARIANT DETECTOR (LIKE MABUY)
-========================= */
-function getVariants(baseId) {
-    return allData.filter(x =>
-        String(x.boothid).startsWith(baseId + "-")
-    );
-}
-
-/* =========================
-   DISPLAY FORMAT
-========================= */
-function formatDisplayId(id) {
-    return String(id);
-}
 
 /* =========================
    RENDER
@@ -115,17 +147,7 @@ function renderFloor() {
             }
         } else {
             for (let i = hall.start; i <= hall.end; i++) {
-
-                const baseId = String(i);
-                const variants = getVariants(baseId);
-
-                if (variants.length > 0) {
-                    variants.forEach(v => {
-                        grid.appendChild(createBooth(v.boothid));
-                    });
-                } else {
-                    grid.appendChild(createBooth(baseId));
-                }
+                grid.appendChild(createBooth(String(i)));
             }
         }
 
@@ -139,33 +161,41 @@ function renderFloor() {
 ========================= */
 function createBooth(id) {
 
-    const displayId = formatDisplayId(id);
-
     const matches = allData.filter(x => x.boothid === id);
 
     let status = "available";
     let exhibitor = "";
-    let size = 0;
+    let finalSize = 0;
 
     if (matches.length) {
+
         if (matches.some(x => x.status === "agent")) status = "agent";
         else if (matches.some(x => x.status === "sold")) status = "sold";
         else if (matches.some(x => x.status === "booked")) status = "booked";
 
         exhibitor = matches.map(x => x.exhibitor).filter(Boolean).join(", ");
-        size = matches.reduce((sum, x) => sum + x.size, 0);
+
+        const groupItems = allData.filter(x => x.groupId === matches[0]?.groupId);
+
+        const totalSize = groupItems.reduce((sum, x) => sum + x.size, 0);
+
+        if (groupItems.length > 1) {
+            finalSize = Math.round(totalSize / groupItems.length);
+        } else {
+            finalSize = totalSize;
+        }
     }
 
     const b = document.createElement("div");
     b.className = "booth " + status;
 
-    // ✅ RAW DISPLAY (THIS FIXES 5035-A ISSUE)
-    b.innerText = displayId;
+    // 🔥 KEEP RAW ID (IMPORTANT FOR 5035-A)
+    b.innerText = id;
 
     b.dataset.id = id;
 
-    b.dataset.tooltip = size
-        ? `${status.toUpperCase()} • [ ${size} sqm ]`
+    b.dataset.tooltip = finalSize
+        ? `${status.toUpperCase()} • [ ${finalSize} sqm ]`
         : `${status.toUpperCase()} • [ - ]`;
 
     b.onclick = (e) => {
@@ -173,10 +203,10 @@ function createBooth(id) {
 
         panel.classList.remove("hidden");
         panelContent.innerHTML = `
-            <b>Booth:</b> ${displayId}<br>
+            <b>Booth:</b> ${id}<br>
             <b>Status:</b> ${status.toUpperCase()}<br>
             <b>Exhibitor:</b> ${exhibitor || "-"}<br>
-            <b>Size:</b> ${size || "-"}
+            <b>Size:</b> ${finalSize || "-"}
         `;
     };
 
@@ -225,7 +255,7 @@ searchBox.addEventListener("input", () => {
 });
 
 /* =========================
-   REPORT (UNCHANGED LOGIC)
+   REPORT (SAFE GROUP AWARE)
 ========================= */
 reportBtn.onclick = (e) => {
     e.stopPropagation();
@@ -247,7 +277,9 @@ reportBtn.onclick = (e) => {
         summary[x.status]++;
         summary.size += x.size;
 
-        const hall = getHall(x.boothid);
+        const hall = x.boothid.match(/^\d+/)
+            ? `Hall ${Math.floor(Number(x.boothid) / 1000)}`
+            : "Ambulance";
 
         if (!hallReport[hall]) {
             hallReport[hall] = {
@@ -264,28 +296,6 @@ reportBtn.onclick = (e) => {
         hallReport[hall][x.status]++;
         hallReport[hall].size += x.size;
     });
-
-    function getHall(id) {
-        const num = parseInt(id);
-
-        if (!isNaN(num)) {
-            if (num >= 5000 && num < 6000) return "Hall 5";
-            if (num >= 6000 && num < 7000) return "Hall 6";
-            if (num >= 7000 && num < 8000) return "Hall 7";
-            if (num >= 8000 && num < 9000) return "Hall 8";
-            if (num >= 9000 && num < 10000) return "Hall 9";
-            if (num >= 1000 && num < 2000) return "Hall 10";
-        }
-
-        if (/^[a-zA-Z]$/.test(id)) return "Ambulance";
-
-        if (id.includes("-")) {
-            const base = id.split("-")[0];
-            return getHall(base);
-        }
-
-        return "Other";
-    }
 
     let html = `
         <h3>📊 OVERALL</h3>
@@ -354,4 +364,5 @@ document.addEventListener("click", () => {
     suggestions.style.display = "none";
 });
 
+/* INIT */
 loadData();
