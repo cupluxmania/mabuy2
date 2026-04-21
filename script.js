@@ -129,6 +129,13 @@ function getVariants(baseId) {
 }
 
 /* =========================
+   FORMAT DISPLAY ID (🔥 NEW)
+========================= */
+function formatDisplayId(id) {
+    return id.replace(/-([a-z])$/, (_, c) => "-" + c.toUpperCase());
+}
+
+/* =========================
    HALL CONFIG
 ========================= */
 const hallConfig = [
@@ -142,7 +149,7 @@ const hallConfig = [
 ];
 
 /* =========================
-   RENDER (WITH VARIANTS)
+   RENDER
 ========================= */
 function renderFloor() {
     floor.innerHTML = "";
@@ -190,10 +197,11 @@ function renderFloor() {
 function createBooth(id) {
 
     const normId = normalizeId(id);
+    const displayId = formatDisplayId(id);
 
     const b = document.createElement("div");
     b.className = "booth available";
-    b.innerText = id;
+    b.innerText = displayId;
     b.dataset.id = normId;
 
     const matches = allData.filter(x => x.boothid === normId);
@@ -211,14 +219,15 @@ function createBooth(id) {
     }
 
     b.className = "booth " + finalStatus;
-    b.dataset.tooltip = `${finalStatus.toUpperCase()} ${exhibitorName ? "• " + exhibitorName : ""}`;
+
+    b.dataset.tooltip = `${displayId} • ${finalStatus.toUpperCase()}${exhibitorName ? " • " + exhibitorName : ""}`;
 
     b.onclick = (e) => {
         e.stopPropagation();
 
         panel.classList.remove("hidden");
         panelContent.innerHTML = `
-            <b>Booth:</b> ${id}<br>
+            <b>Booth:</b> ${displayId}<br>
             <b>Status:</b> <span style="color:${getColor(finalStatus)}">${finalStatus.toUpperCase()}</span><br>
             <b>Exhibitor:</b> ${exhibitorName || "-"}
         `;
@@ -228,7 +237,7 @@ function createBooth(id) {
 }
 
 /* =========================
-   SEARCH (WITH BLINK)
+   SEARCH
 ========================= */
 searchBox.addEventListener("input", () => {
 
@@ -246,7 +255,7 @@ searchBox.addEventListener("input", () => {
 
         const div = document.createElement("div");
         div.className = "suggestionItem";
-        div.innerText = `${x.boothid} - ${x.exhibitor}`;
+        div.innerText = `${formatDisplayId(x.boothid)} - ${x.exhibitor}`;
 
         div.onclick = () => {
             const el = document.querySelector(`[data-id='${x.boothid}']`);
