@@ -11,7 +11,7 @@ const reportBtn = document.getElementById("reportBtn");
 let allData = [];
 
 /* =========================
-   CLEAN (SAFE ONLY)
+   CLEAN
 ========================= */
 function clean(val) {
     if (!val) return "";
@@ -33,67 +33,7 @@ function getStatus(row) {
 }
 
 /* =========================
-   SAFE KEY (ONLY FOR MATCHING)
-========================= */
-function key(id) {
-    return String(id).replace(/\s+/g, "");
-}
-
-/* =========================
-   PARSE BOOTH (FIXED LOGIC)
-========================= */
-function parseBooth(id) {
-
-    const raw = String(id);
-
-    // CASE 1: SUFFIX (5035-A / 5035-B)
-    if (raw.includes("-") && /[a-zA-Z]$/.test(raw)) {
-        return {
-            type: "suffix",
-            id: raw,
-            groupId: raw,
-            members: [raw],
-            size: 9
-        };
-    }
-
-    // CASE 2: RANGE (5003-5004)
-    if (raw.includes("-") && /^\d/.test(raw)) {
-
-        const parts = raw.split("-");
-
-        const start = Number(parts[0]);
-        const end = Number(parts[1]);
-
-        if (!isNaN(start) && !isNaN(end)) {
-
-            const members = [];
-            for (let i = start; i <= end; i++) {
-                members.push(String(i));
-            }
-
-            return {
-                type: "range",
-                id: raw,
-                groupId: raw,
-                members,
-                size: members.length * 9
-            };
-        }
-    }
-
-    // CASE 3: SINGLE
-    return {
-        type: "single",
-        id: raw,
-        groupId: raw,
-        members: [raw],
-        size: 9
-    };
-}
-
-/* =========================
-   LOAD DATA (RESTORED SAFE)
+   LOAD DATA
 ========================= */
 async function loadData() {
     const res = await fetch(`${G_SCRIPT_URL}?cmd=read&t=${Date.now()}`);
@@ -106,14 +46,14 @@ async function loadData() {
 
         String(row.boothid).split(",").forEach(id => {
 
-            const parsed = parseBooth(id);
+            const rawId = String(id).trim();
 
             temp.push({
-                ...parsed,
+                boothid: rawId,
                 status: getStatus(row),
-                exhibitor: clean(row.exhibitor)
+                exhibitor: clean(row.exhibitor),
+                size: Number(row.size || row.sqm || 9)
             });
-
         });
     });
 
@@ -122,14 +62,14 @@ async function loadData() {
 }
 
 /* =========================
-   FIND (SAFE MATCHING)
+   FIND MATCH
 ========================= */
-function findGroup(id) {
-    return allData.find(x => x.members.includes(id));
+function findMatches(id) {
+    return allData.filter(x => x.boothid === id);
 }
 
 /* =========================
-   HALL CONFIG (RESTORED)
+   HALL CONFIG (UNCHANGED)
 ========================= */
 const hallConfig = [
   {name:"Hall 5", start:5001, end:5079},
@@ -142,7 +82,7 @@ const hallConfig = [
 ];
 
 /* =========================
-   RENDER FLOOR (FIXED + SAFE)
+   RENDER FLOOR (SAFE)
 ========================= */
 function renderFloor() {
 
@@ -164,28 +104,34 @@ function renderFloor() {
 
         const process = (id) => {
 
-            const group = findGroup(id);
+            const matches = findMatches(id);
 
-            // CASE 1: suffix → always render
-            if (group && group.type === "suffix") {
-                grid.appendChild(createBooth(id, group, 1));
+            // suffix booths → ALWAYS individual
+            if (id.includes("-") && /[a-zA-Z]$/.test(id)) {
+                grid.appendChild(createBooth(id, matches, 1));
                 return;
             }
 
-            // CASE 2: range → merge once
-            if (group && group.type === "range") {
+            // range merge (5003-5004)
+            if (id.includes("-") && /^\d/.test(id)) {
 
-                if (rendered.has(group.groupId)) return;
-                rendered.add(group.groupId);
+                const parts = id.split("-");
+                const start = Number(parts[0]);
+                const end = Number(parts[1]);
 
-                const span = group.members.length;
+                if (!isNaN(start) && !isNaN(end)) {
 
-                grid.appendChild(createBooth(group.members[0], group, span));
-                return;
+                    if (rendered.has(id)) return;
+                    rendered.add(id);
+
+                    const span = (end - start) + 1;
+
+                    grid.appendChild(createBooth(id, matches, span));
+                    return;
+                }
             }
 
-            // CASE 3: single
-            grid.appendChild(createBooth(id, group, 1));
+            grid.appendChild(createBooth(id, matches, 1));
         };
 
         if (h.name === "Ambulance") {
@@ -204,18 +150,28 @@ function renderFloor() {
 }
 
 /* =========================
-   CREATE BOOTH (STABLE)
+   CREATE BOOTH (VISUAL MERGE ONLY)
 ========================= */
-function createBooth(id, group, span = 1) {
+function createBooth(id, matches, span = 1) {
+
+    let status = "available";
+    let exhibitor = "";
+    let size = 9;
+
+    if (matches && matches.length) {
+
+        if (matches.some(x => x.status === "agent")) status = "agent";
+        else if (matches.some(x => x.status === "sold")) status = "sold";
+        else if (matches.some(x => x.status === "booked")) status = "booked";
+
+        exhibitor = matches.map(x => x.exhibitor).filter(Boolean).join(", ");
+        size = matches.reduce((sum, x) => sum + (x.size || 9), 0);
+    }
 
     const b = document.createElement("div");
-
-    const status = group?.status || "available";
-    const exhibitor = group?.exhibitor || "";
-    const size = group?.size || 9;
-
     b.className = "booth " + status;
 
+    // 🔥 VISUAL MERGE (THIS IS THE KEY FIX)
     b.style.gridColumn = `span ${span}`;
 
     b.innerText = id;
@@ -239,6 +195,67 @@ function createBooth(id, group, span = 1) {
 }
 
 /* =========================
-   INIT
+   SEARCH (UNCHANGED LOGIC STYLE)
 ========================= */
+searchBox.addEventListener("input", () => {
+
+    const val = searchBox.value.toLowerCase();
+
+    const result = allData.filter(x =>
+        x.boothid.toLowerCase().includes(val) ||
+        (x.exhibitor || "").toLowerCase().includes(val)
+    );
+
+    suggestions.innerHTML = "";
+    suggestions.style.display = result.length ? "block" : "none";
+
+    result.forEach(x => {
+
+        const div = document.createElement("div");
+        div.className = "suggestionItem";
+        div.innerText = `${x.boothid} - ${x.exhibitor}`;
+
+        div.onclick = () => {
+
+            const el = document.querySelector(`[data-id='${x.boothid}']`);
+            if (!el) return;
+
+            el.scrollIntoView({ behavior: "smooth", block: "center" });
+
+            el.classList.add("highlight", "blink");
+
+            setTimeout(() => el.classList.remove("blink"), 5000);
+            setTimeout(() => el.classList.remove("highlight"), 6000);
+
+            el.click();
+            suggestions.style.display = "none";
+        };
+
+        suggestions.appendChild(div);
+    });
+});
+
+/* =========================
+   DRAG (UNCHANGED FIXED)
+========================= */
+let isDown = false, startX, startY, scrollLeft, scrollTop;
+
+container.addEventListener("mousedown", (e) => {
+    isDown = true;
+    startX = e.pageX;
+    startY = e.pageY;
+    scrollLeft = container.scrollLeft;
+    scrollTop = container.scrollTop;
+});
+
+document.addEventListener("mouseup", () => isDown = false);
+
+document.addEventListener("mousemove", (e) => {
+    if (!isDown) return;
+
+    container.scrollLeft = scrollLeft - (e.pageX - startX);
+    container.scrollTop = scrollTop - (e.pageY - startY);
+});
+
+/* INIT */
 loadData();
