@@ -9,7 +9,6 @@ const panelContent = document.getElementById("panelContent");
 
 let allData = [];
 let zoomLevel = 1;
-let DEBUG = false;
 
 /* =========================
    🧼 CLEAN TEXT
@@ -121,6 +120,15 @@ async function loadData() {
 }
 
 /* =========================
+   GET VARIANTS (-A/-B)
+========================= */
+function getVariants(baseId) {
+    return allData.filter(x =>
+        normalizeId(x.boothid).startsWith(normalizeId(baseId) + "-")
+    );
+}
+
+/* =========================
    HALL CONFIG
 ========================= */
 const hallConfig = [
@@ -134,7 +142,7 @@ const hallConfig = [
 ];
 
 /* =========================
-   RENDER
+   RENDER (WITH VARIANTS)
 ========================= */
 function renderFloor() {
     floor.innerHTML = "";
@@ -157,7 +165,17 @@ function renderFloor() {
             }
         } else {
             for (let i = hall.start; i <= hall.end; i++) {
-                grid.appendChild(createBooth(String(i)));
+
+                const baseId = String(i);
+                const variants = getVariants(baseId);
+
+                if (variants.length > 0) {
+                    variants.forEach(v => {
+                        grid.appendChild(createBooth(v.boothid));
+                    });
+                } else {
+                    grid.appendChild(createBooth(baseId));
+                }
             }
         }
 
@@ -210,7 +228,7 @@ function createBooth(id) {
 }
 
 /* =========================
-   SEARCH (🔥 FIXED)
+   SEARCH (WITH BLINK)
 ========================= */
 searchBox.addEventListener("input", () => {
 
@@ -241,15 +259,12 @@ searchBox.addEventListener("input", () => {
                     inline: "center"
                 });
 
-                // 🔥 CLEAR OLD
                 document.querySelectorAll(".highlight, .blink").forEach(b => {
                     b.classList.remove("highlight", "blink");
                 });
 
-                // 🔥 APPLY EFFECT
                 el.classList.add("highlight", "blink");
 
-                // ⏱ REMOVE AFTER 5s
                 setTimeout(() => {
                     el.classList.remove("highlight", "blink");
                 }, 5000);
