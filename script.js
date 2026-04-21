@@ -19,12 +19,12 @@ function clean(val) {
     return String(val).replace(/\s+/g, " ").trim();
 }
 
-function normalize(id) {
-    return String(id || "").replace(/\s+/g, "").toLowerCase();
+function normalize(val) {
+    return String(val || "").replace(/\s+/g, "").toLowerCase();
 }
 
-function format(id) {
-    return String(id).toUpperCase();
+function format(val) {
+    return String(val || "");
 }
 
 /* =========================
@@ -77,8 +77,9 @@ async function loadData() {
             const cleanId = id.trim();
 
             temp.push({
-                boothid: normalize(cleanId),
-                label: format(cleanId),
+                rawId: cleanId,              // ✅ KEEP ORIGINAL (5035-A)
+                keyId: normalize(cleanId),  // ✅ FOR MATCHING ONLY
+                label: cleanId,             // ✅ DISPLAY
                 status: getStatus(row),
                 exhibitor: clean(row.exhibitor),
                 size: Number(row.size || row.sqm || 0),
@@ -142,8 +143,8 @@ function renderFloor() {
 ========================= */
 function createBooth(id) {
 
-    const norm = normalize(id);
-    const matches = allData.filter(x => x.boothid === norm);
+    const key = normalize(id);
+    const matches = allData.filter(x => x.keyId === key);
 
     let status = "available";
     let exhibitor = "";
@@ -160,10 +161,12 @@ function createBooth(id) {
 
     const b = document.createElement("div");
     b.className = "booth " + status;
-    b.innerText = format(id);
-    b.dataset.id = norm;
 
-    // ✅ TOOLTIP FORMAT UPDATED
+    // ✅ FIX: show original format (5035-A works now)
+    b.innerText = id;
+
+    b.dataset.id = key;
+
     b.dataset.tooltip = size
         ? `${status.toUpperCase()} • [ ${size} sqm ]`
         : `${status.toUpperCase()} • [ - ]`;
@@ -173,7 +176,7 @@ function createBooth(id) {
 
         panel.classList.remove("hidden");
         panelContent.innerHTML = `
-            <b>Booth:</b> ${format(id)}<br>
+            <b>Booth:</b> ${id}<br>
             <b>Status:</b> ${status.toUpperCase()}<br>
             <b>Exhibitor:</b> ${exhibitor || "-"}<br>
             <b>Size:</b> ${size || "-"}
@@ -191,7 +194,7 @@ searchBox.addEventListener("input", () => {
     const val = searchBox.value.toLowerCase();
 
     const result = allData.filter(x =>
-        x.boothid.includes(val) ||
+        x.keyId.includes(val) ||
         (x.exhibitor || "").toLowerCase().includes(val)
     );
 
@@ -206,7 +209,7 @@ searchBox.addEventListener("input", () => {
 
         div.onclick = () => {
 
-            const el = document.querySelector(`[data-id='${x.boothid}']`);
+            const el = document.querySelector(`[data-id='${x.keyId}']`);
             if (!el) return;
 
             el.scrollIntoView({ behavior: "smooth", block: "center" });
