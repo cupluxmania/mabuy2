@@ -6,12 +6,11 @@ const searchBox = document.getElementById("searchBox");
 const suggestions = document.getElementById("suggestions");
 const panel = document.getElementById("sidePanel");
 const panelContent = document.getElementById("panelContent");
-const reportBtn = document.getElementById("reportBtn");
 
 let allData = [];
 
 /* =========================
-   CLEAN
+   CLEAN (ONLY TEXT CLEANING, NO TRIM LOGIC ON IDS)
 ========================= */
 function clean(val) {
     if (!val) return "";
@@ -33,51 +32,56 @@ function getStatus(row) {
 }
 
 /* =========================
-   GROUP PARSER (FINAL)
+   BOOTH PARSER (NO TRIM ON ID)
 ========================= */
-function parseGroup(id) {
+function parseBooth(id) {
 
-    id = String(id).trim();
+    // ❗ DO NOT modify id itself
+    const rawId = String(id);
 
-    // suffix booths → NEVER MERGE
-    if (id.includes("-") && /[a-zA-Z]/.test(id.split("-")[1])) {
+    // CASE 1: SUFFIX (5035-A / 5035-B)
+    if (rawId.includes("-") && /[a-zA-Z]$/.test(rawId)) {
         return {
-            type: "single",
-            groupId: id,
-            members: [id],
+            type: "suffix",
+            id: rawId,
+            groupId: rawId,
+            members: [rawId],
             size: 9
         };
     }
 
-    // numeric range → MERGE BLOCK
-    if (id.includes("-") && /^\d/.test(id)) {
+    // CASE 2: RANGE (5003-5004)
+    if (rawId.includes("-") && /^\d/.test(rawId)) {
 
-        const parts = id.split("-").map(x => x.trim());
+        const parts = rawId.split("-");
 
-        if (parts.every(p => /^\d+$/.test(p))) {
+        const start = parts[0];
+        const end = parts[parts.length - 1];
 
-            const start = Number(parts[0]);
-            const end = Number(parts[parts.length - 1]);
+        if (!isNaN(start) && !isNaN(end)) {
 
             const members = [];
-            for (let i = start; i <= end; i++) {
+
+            for (let i = Number(start); i <= Number(end); i++) {
                 members.push(String(i));
             }
 
             return {
                 type: "range",
-                groupId: id,
+                id: rawId,
+                groupId: rawId,
                 members,
-                size: members.length * 9 // 9 sqm per booth
+                size: members.length * 9
             };
         }
     }
 
-    // single booth
+    // CASE 3: SINGLE
     return {
         type: "single",
-        groupId: id,
-        members: [id],
+        id: rawId,
+        groupId: rawId,
+        members: [rawId],
         size: 9
     };
 }
@@ -95,11 +99,13 @@ async function loadData() {
         if (!row.boothid) return;
 
         String(row.boothid).split(",").forEach(id => {
+
             temp.push({
-                ...parseGroup(id),
+                ...parseBooth(id),   // ❗ NO TRIM, NO NORMALIZE
                 status: getStatus(row),
                 exhibitor: clean(row.exhibitor)
             });
+
         });
     });
 
@@ -108,108 +114,67 @@ async function loadData() {
 }
 
 /* =========================
-   FIND GROUP
+   FIND GROUP (EXACT MATCH ONLY)
 ========================= */
 function findGroup(id) {
-    return allData.find(g => g.members.includes(id));
+    return allData.find(x => x.members.includes(id));
 }
 
 /* =========================
-   HALL CONFIG
-========================= */
-const hallConfig = [
-  {name:"Hall 5", start:5001, end:5079},
-  {name:"Hall 6", start:6001, end:6189},
-  {name:"Hall 7", start:7001, end:7196},
-  {name:"Hall 8", start:8001, end:8181},
-  {name:"Hall 9", start:9001, end:9191},
-  {name:"Hall 10", start:1001, end:1151},
-  {name:"Ambulance", start:"A", end:"Z"}
-];
-
-/* =========================
-   RENDER FLOOR (KEY FIX)
+   RENDER FLOOR
 ========================= */
 function renderFloor() {
+
     floor.innerHTML = "";
 
-    hallConfig.forEach(h => {
+    const rendered = new Set();
 
-        const hallDiv = document.createElement("div");
-        hallDiv.className = "hall";
+    for (let i = 5001; i <= 5079; i++) {
 
-        const title = document.createElement("h3");
-        title.innerText = h.name;
-        hallDiv.appendChild(title);
+        const id = String(i);
 
-        const grid = document.createElement("div");
-        grid.className = "grid";
+        const group = findGroup(id);
 
-        const rendered = new Set();
-
-        const process = (id) => {
-
-            const group = findGroup(id);
-
-            if (!group) {
-                grid.appendChild(createBooth(id));
-                return;
-            }
-
-            // 🔥 IMPORTANT: only render once per group
-            if (rendered.has(group.groupId)) return;
-            rendered.add(group.groupId);
-
-            const span = Math.max(1, group.members.length);
-
-            const booth = createBooth(group.members[0], group, span);
-            grid.appendChild(booth);
-        };
-
-        if (h.name === "Ambulance") {
-            for (let i = 65; i <= 90; i++) {
-                process(String.fromCharCode(i));
-            }
-        } else {
-            for (let i = h.start; i <= h.end; i++) {
-                process(String(i));
-            }
+        // ❗ suffix must always render individually
+        if (group && group.type === "suffix") {
+            floor.appendChild(createBooth(id, group, 1));
+            continue;
         }
 
-        hallDiv.appendChild(grid);
-        floor.appendChild(hallDiv);
-    });
+        // ❗ range group → render once
+        if (group && group.type === "range") {
+
+            if (rendered.has(group.groupId)) continue;
+            rendered.add(group.groupId);
+
+            const span = group.members.length;
+
+            floor.appendChild(createBooth(group.members[0], group, span));
+            continue;
+        }
+
+        // single booth
+        floor.appendChild(createBooth(id, group, 1));
+    }
 }
 
 /* =========================
-   CREATE BOOTH (MERGED VISUAL)
+   CREATE BOOTH (VISUAL MERGE)
 ========================= */
-function createBooth(id, group = null, span = 1) {
-
-    if (!group) group = findGroup(id);
-
-    let status = "available";
-    let exhibitor = "";
-    let size = 9;
-
-    if (group) {
-
-        if (group.status === "agent") status = "agent";
-        else if (group.status === "sold") status = "sold";
-        else if (group.status === "booked") status = "booked";
-
-        exhibitor = group.exhibitor;
-
-        size = group.size || 9;
-    }
+function createBooth(id, group, span = 1) {
 
     const b = document.createElement("div");
+
+    let status = group?.status || "available";
+    let exhibitor = group?.exhibitor || "";
+    let size = group?.size || 9;
+
     b.className = "booth " + status;
 
-    // 🔥 REAL MERGED BLOCK
+    // 🔥 REAL MERGE VISUAL
     b.style.gridColumn = `span ${span}`;
 
-    b.innerText = id;
+    b.innerText = id; // ❗ RAW ID ONLY
     b.dataset.id = id;
 
     b.dataset.tooltip = `${status.toUpperCase()} • [ ${size} sqm ]`;
@@ -228,45 +193,6 @@ function createBooth(id, group = null, span = 1) {
 
     return b;
 }
-
-/* =========================
-   SEARCH
-========================= */
-searchBox.addEventListener("input", () => {
-
-    const val = searchBox.value.toLowerCase();
-
-    const result = allData.filter(x =>
-        x.members.some(m => m.toLowerCase().includes(val)) ||
-        (x.exhibitor || "").toLowerCase().includes(val)
-    );
-
-    suggestions.innerHTML = "";
-    suggestions.style.display = result.length ? "block" : "none";
-
-    result.forEach(x => {
-
-        const div = document.createElement("div");
-        div.className = "suggestionItem";
-        div.innerText = `${x.groupId} - ${x.exhibitor}`;
-
-        div.onclick = () => {
-            const el = document.querySelector(`[data-id='${x.members[0]}']`);
-            if (!el) return;
-
-            el.scrollIntoView({ behavior: "smooth", block: "center" });
-            el.classList.add("highlight", "blink");
-
-            setTimeout(() => el.classList.remove("blink"), 5000);
-            setTimeout(() => el.classList.remove("highlight"), 6000);
-
-            el.click();
-            suggestions.style.display = "none";
-        };
-
-        suggestions.appendChild(div);
-    });
-});
 
 /* =========================
    INIT
