@@ -30,8 +30,15 @@ header {
     border-radius: 8px;
     border: 1px solid #ccc;
     font-size: 15px;
+    outline: none;
 }
 
+#searchBox:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59,130,246,0.2);
+}
+
+/* DROPDOWN */
 #suggestions {
     position: absolute;
     width: 100%;
@@ -47,12 +54,15 @@ header {
 }
 
 .suggestionItem {
-    padding: 12px;
+    padding: 12px 15px;
     cursor: pointer;
+    border-bottom: 1px solid #f1f5f9;
+    font-size: 14px;
 }
 
 .suggestionItem:hover {
     background: #eff6ff;
+    color: #1d4ed8;
 }
 
 /* LEGEND */
@@ -66,8 +76,9 @@ header {
 .dot {
     width: 14px;
     height: 14px;
-    border-radius: 4px;
     display: inline-block;
+    border-radius: 4px;
+    margin-right: 5px;
 }
 
 /* COLORS */
@@ -76,6 +87,24 @@ header {
 .booked { background: #eab308; }
 .agent { background: #22c55e; }
 
+/* MENU */
+#menu {
+    margin-bottom: 10px;
+}
+
+button {
+    padding: 8px 14px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    cursor: pointer;
+    background: white;
+    transition: 0.2s;
+}
+
+button:hover {
+    background: #f1f5f9;
+}
+
 /* FLOOR */
 #floorContainer {
     height: 75vh;
@@ -83,7 +112,6 @@ header {
     background: white;
     cursor: grab;
     border-radius: 10px;
-    position: relative;
 }
 
 #floorContainer:active {
@@ -106,6 +134,7 @@ header {
 
 .hall h3 {
     margin: 0;
+    font-size: 18px;
 }
 
 /* GRID */
@@ -127,7 +156,9 @@ header {
     border-radius: 6px;
     cursor: pointer;
     position: relative;
+    z-index: 1;
     user-select: none;
+    transition: transform 0.2s ease;
 }
 
 /* TOOLTIP */
@@ -145,21 +176,33 @@ header {
     white-space: nowrap;
 }
 
-/* HIGHLIGHT */
+/* =========================
+   🔥 HIGHLIGHT (IMPROVED)
+========================= */
 .highlight {
     outline: 4px solid #facc15;
-    outline-offset: 2px;
+    outline-offset: 3px;
+    z-index: 50 !important;
+    position: relative;
 }
 
-/* BLINK */
+/* =========================
+   🔥 SMOOTH BLINK (NO JUMP)
+========================= */
 @keyframes blink {
-    0% { transform: scale(1); box-shadow: 0 0 0px #facc15; }
-    50% { transform: scale(1.2); box-shadow: 0 0 20px #facc15; }
-    100% { transform: scale(1); box-shadow: 0 0 0px #facc15; }
+    0% {
+        box-shadow: 0 0 0 0 rgba(250,204,21,0.7);
+    }
+    50% {
+        box-shadow: 0 0 25px 10px rgba(250,204,21,0.9);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(250,204,21,0);
+    }
 }
 
 .blink {
-    animation: blink 0.6s ease-in-out infinite;
+    animation: blink 1s ease-in-out infinite;
 }
 
 /* SIDE PANEL */
@@ -178,10 +221,7 @@ header {
     display: none;
 }
 
-/* REPORT FIX (IMPORTANT) */
-#reportLayer {
-    position: absolute;
-    inset: 0;
-    z-index: 1000;
-    pointer-events: none;
+#panelContent b {
+    font-size: 12px;
+    color: #64748b;
 }
