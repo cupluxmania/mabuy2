@@ -11,30 +11,39 @@ let allData = [];
 let zoomLevel = 1;
 
 /* =========================
-   🔥 CORE STATUS LOGIC (FIXED)
+   🔥 CORE STATUS LOGIC (FINAL FIX)
 ========================= */
 function getStatus(text) {
     if (!text) return "available";
 
-    // 🔥 CLEAN TEXT (remove spaces, line breaks, etc.)
-    const cleaned = text.replace(/\s+/g, "").toLowerCase();
+    const raw = String(text);
 
-    // TRUE EMPTY OR USELESS VALUES
+    // CLEAN TEXT (remove spaces, line breaks)
+    const cleaned = raw.replace(/\s+/g, "").toLowerCase();
+
+    // EMPTY / INVALID VALUES
     if (cleaned === "" || cleaned === "-" || cleaned === "n/a" || cleaned === "null") {
         return "available";
     }
 
-    const lower = text.toLowerCase();
+    const lower = raw.toLowerCase();
 
     // PRIORITY 1: AGENT
     if (lower.includes("agent")) return "agent";
 
-    // PRIORITY 2: ANY UPPERCASE → SOLD
-    const hasUppercase = text !== text.toLowerCase();
-    if (hasUppercase) return "sold";
+    // 🔥 CHECK IF TEXT HAS LETTERS
+    const hasLetters = /[a-zA-Z]/.test(raw);
 
-    // PRIORITY 3: ALL LOWERCASE → BOOKED
-    return "booked";
+    if (hasLetters) {
+        // ANY uppercase letter → SOLD
+        if (/[A-Z]/.test(raw)) return "sold";
+
+        // all lowercase letters → BOOKED
+        return "booked";
+    }
+
+    // 🔥 NO LETTERS (numbers only) → AVAILABLE
+    return "available";
 }
 
 function getColor(status){
