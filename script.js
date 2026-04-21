@@ -6,108 +6,103 @@ const searchBox = document.getElementById("searchBox");
 const suggestions = document.getElementById("suggestions");
 const panel = document.getElementById("sidePanel");
 const panelContent = document.getElementById("panelContent");
-const reportBtn = document.getElementById("reportBtn");
 
 let allData = [];
+let zoomLevel = 1;
 
 /* =========================
-   CLEAN
+   🧼 CLEAN TEXT
 ========================= */
-function clean(v) {
-    return v ? String(v).replace(/\s+/g, " ").trim() : "";
+function cleanText(val) {
+    if (!val) return "";
+    let text = String(val).replace(/\u00A0/g, " ").replace(/\s+/g, " ").trim();
+    const lower = text.toLowerCase();
+    if (["-", "n/a", "na", "null", "undefined"].includes(lower)) return "";
+    return text;
 }
 
 /* =========================
-   STATUS
+   🔥 NORMALIZE ID
 ========================= */
-function getStatus(row) {
-    const s = clean(row.status).toLowerCase();
+function normalizeId(id) {
+    return String(id || "").replace(/\u00A0/g, "").replace(/\s+/g, "").trim().toLowerCase();
+}
 
-    if (s === "sold") return "sold";
-    if (s === "booked") return "booked";
-    if (s.includes("agent")) return "agent";
-    if (s === "available") return "available";
-
+/* =========================
+   🔍 FALLBACK ANALYZER
+========================= */
+function analyzeStatus(text) {
+    const raw = cleanText(text);
+    if (!raw) return "available";
+    if (raw.toLowerCase().includes("agent")) return "agent";
+    if (/[a-zA-Z]/.test(raw)) {
+        return /[A-Z]/.test(raw) ? "sold" : "booked";
+    }
     return "available";
 }
 
 /* =========================
-   SAFE BOOTH PARSER
+   🎯 STATUS FROM SHEET
 ========================= */
-function parseBooths(raw) {
+function getStatusFromSheet(row) {
+    let status = cleanText(row.status).toLowerCase();
+    if (status === "available") return "available";
+    if (status === "booked") return "booked";
+    if (status === "sold") return "sold";
+    if (status.includes("agent")) return "agent";
 
-    if (!raw) return [];
+    const fallbackText = [cleanText(row.helper), cleanText(row.exhibitor)].join(" ");
+    return analyzeStatus(fallbackText);
+}
 
-    const fixed = String(raw)
-        .replace(/\n/g, ",")
-        .replace(/\s+/g, " ")
-        .trim();
-
-    return fixed
-        .split(",")
-        .map(x => x.trim())
-        .filter(x => x.length > 0);
+function getColor(status){
+    return {
+        available:"#3b82f6",
+        sold:"#ef4444",
+        booked:"#eab308",
+        agent:"#22c55e"
+    }[status];
 }
 
 /* =========================
-   LOAD DATA (DEBUG SAFE)
+   LOAD DATA
 ========================= */
 async function loadData() {
+    const res = await fetch(`${G_SCRIPT_URL}?cmd=read&t=${Date.now()}`);
+    const raw = await res.json();
+    const expanded = [];
 
-    try {
-        console.log("Loading API...");
-
-        const res = await fetch(`${G_SCRIPT_URL}?cmd=read&t=${Date.now()}`);
-        const raw = await res.json();
-
-        console.log("RAW API:", raw);
-
-        const temp = [];
-
-        raw.forEach(row => {
-
-            if (!row.boothid || !String(row.boothid).trim()) return;
-
-            const booths = parseBooths(row.boothid);
-
-            const totalSize = Number(row.size || 0);
-            const perSize = booths.length ? totalSize / booths.length : totalSize;
-
-            booths.forEach(id => {
-
-                temp.push({
-                    boothid: id, // 🔥 RAW ONLY
-                    status: getStatus(row),
-                    exhibitor: clean(row.exhibitor),
-                    size: perSize
-                });
+    raw.forEach(row => {
+        if (!row.boothid) return;
+        const booths = String(row.boothid).split(",");
+        booths.forEach(id => {
+            const boothIdClean = normalizeId(id);
+            const finalStatus = getStatusFromSheet(row);
+            expanded.push({
+                boothid: boothIdClean,
+                status: finalStatus,
+                exhibitor: cleanText(row.exhibitor)
             });
         });
+    });
 
-        allData = temp;
-
-        console.log("PARSED DATA:", allData);
-
-        renderFloor();
-
-    } catch (err) {
-        console.error("❌ LOAD FAILED:", err);
-        floor.innerHTML = "<h3 style='color:red'>Failed to load data</h3>";
-    }
+    allData = expanded;
+    renderFloor();
 }
 
-/* =========================
-   FIND
-========================= */
-function find(id) {
-    return allData.filter(x => x.boothid === id);
+function getVariants(baseId) {
+    return allData.filter(x => normalizeId(x.boothid).startsWith(normalizeId(baseId) + "-"));
+}
+
+function formatDisplayId(id) {
+    return id.replace(/-([a-z])$/, (_, c) => "-" + c.toUpperCase());
 }
 
 /* =========================
    HALL CONFIG
 ========================= */
 const hallConfig = [
-  {name:"Hall 5", start:5001, end:5079},
+  {name:"Hall 5", start:5001, end:5078},
   {name:"Hall 6", start:6001, end:6189},
   {name:"Hall 7", start:7001, end:7196},
   {name:"Hall 8", start:8001, end:8181},
@@ -117,182 +112,151 @@ const hallConfig = [
 ];
 
 /* =========================
-   RENDER FLOOR (SAFE)
+   RENDER (UPDATED FOR SUMMARY BAR)
 ========================= */
 function renderFloor() {
-
-    if (!allData.length) {
-        console.warn("No data to render!");
-        floor.innerHTML = "<h3>No booth data found</h3>";
-        return;
-    }
-
     floor.innerHTML = "";
 
-    hallConfig.forEach(h => {
-
+    hallConfig.forEach(hall => {
         const hallDiv = document.createElement("div");
         hallDiv.className = "hall";
 
+        // Header containing Title and the Count Bar
+        const headerRow = document.createElement("div");
+        headerRow.className = "hall-header";
+
         const title = document.createElement("h3");
-        title.innerText = h.name;
-        hallDiv.appendChild(title);
+        title.innerText = hall.name;
+        headerRow.appendChild(title);
+
+        const summary = document.createElement("div");
+        summary.className = "hall-summary";
+        
+        const boothElements = [];
+        if (hall.name === "Ambulance") {
+            for (let i = 65; i <= 90; i++) {
+                boothElements.push(createBooth(String.fromCharCode(i)));
+            }
+        } else {
+            for (let i = hall.start; i <= hall.end; i++) {
+                const baseId = String(i);
+                const variants = getVariants(baseId);
+                if (variants.length > 0) {
+                    variants.forEach(v => boothElements.push(createBooth(v.boothid)));
+                } else {
+                    boothElements.push(createBooth(baseId));
+                }
+            }
+        }
+
+        // Calculate Totals for this Hall
+        const counts = { available: 0, sold: 0, booked: 0, agent: 0 };
+        boothElements.forEach(el => {
+            const status = el.className.split(" ")[1];
+            if(counts[status] !== undefined) counts[status]++;
+        });
+
+        // Create the Count Chips (Available, Sold, Booked, Agent)
+        Object.keys(counts).forEach(status => {
+            const chip = document.createElement("div");
+            chip.className = "count-chip";
+            chip.innerHTML = `<span class="dot ${status}"></span> <strong>${counts[status]}</strong>`;
+            summary.appendChild(chip);
+        });
+
+        headerRow.appendChild(summary);
+        hallDiv.appendChild(headerRow);
 
         const grid = document.createElement("div");
         grid.className = "grid";
-
-        const make = (id) => {
-
-            const data = find(id)[0];
-
-            grid.appendChild(createBooth(id, data));
-        };
-
-        if (h.name === "Ambulance") {
-            for (let i = 65; i <= 90; i++) {
-                make(String.fromCharCode(i));
-            }
-        } else {
-            for (let i = h.start; i <= h.end; i++) {
-                make(String(i));
-            }
-        }
+        boothElements.forEach(be => grid.appendChild(be));
 
         hallDiv.appendChild(grid);
         floor.appendChild(hallDiv);
     });
 }
 
-/* =========================
-   BOOTH
-========================= */
-function createBooth(id, data) {
-
+function createBooth(id) {
+    const normId = normalizeId(id);
+    const displayId = formatDisplayId(id);
     const b = document.createElement("div");
+    b.className = "booth available";
+    b.innerText = displayId;
+    b.dataset.id = normId;
 
-    const status = data?.status || "available";
-    const exhibitor = data?.exhibitor || "";
-    const size = data?.size || 0;
+    const matches = allData.filter(x => x.boothid === normId);
+    let finalStatus = "available";
+    let exhibitorName = "";
 
-    b.className = "booth " + status;
+    if (matches.length) {
+        if (matches.some(x => x.status === "agent")) finalStatus = "agent";
+        else if (matches.some(x => x.status === "sold")) finalStatus = "sold";
+        else if (matches.some(x => x.status === "booked")) finalStatus = "booked";
+        exhibitorName = matches.map(x => x.exhibitor).filter(Boolean).join(", ");
+    }
 
-    b.innerText = id;
-    b.dataset.id = id;
-
-    b.dataset.tooltip = `${status.toUpperCase()} • [ ${size} sqm ]`;
+    b.className = "booth " + finalStatus;
+    b.dataset.tooltip = `${displayId} • ${finalStatus.toUpperCase()}${exhibitorName ? " • " + exhibitorName : ""}`;
 
     b.onclick = (e) => {
         e.stopPropagation();
-
         panel.classList.remove("hidden");
         panelContent.innerHTML = `
-            <b>Booth:</b> ${id}<br>
-            <b>Status:</b> ${status.toUpperCase()}<br>
-            <b>Exhibitor:</b> ${exhibitor || "-"}<br>
-            <b>Size:</b> ${size}
+            <b>Booth:</b> ${displayId}<br>
+            <b>Status:</b> <span style="color:${getColor(finalStatus)}">${finalStatus.toUpperCase()}</span><br>
+            <b>Exhibitor:</b> ${exhibitorName || "-"}
         `;
     };
-
     return b;
 }
 
 /* =========================
-   SEARCH
+   SEARCH & DRAG & ZOOM (UNCHANGED)
 ========================= */
 searchBox.addEventListener("input", () => {
-
     const val = searchBox.value.toLowerCase();
-
-    const result = allData.filter(x =>
-        x.boothid.toLowerCase().includes(val) ||
-        (x.exhibitor || "").toLowerCase().includes(val)
-    );
-
+    const result = allData.filter(x => x.boothid.includes(val) || (x.exhibitor || "").toLowerCase().includes(val));
     suggestions.innerHTML = "";
     suggestions.style.display = result.length ? "block" : "none";
-
     result.forEach(x => {
-
         const div = document.createElement("div");
         div.className = "suggestionItem";
-        div.innerText = `${x.boothid} - ${x.exhibitor}`;
-
+        div.innerText = `${formatDisplayId(x.boothid)} - ${x.exhibitor}`;
         div.onclick = () => {
-
             const el = document.querySelector(`[data-id='${x.boothid}']`);
-            if (!el) return;
-
-            el.scrollIntoView({ behavior: "smooth", block: "center" });
-            el.classList.add("highlight", "blink");
-
-            setTimeout(() => el.classList.remove("blink"), 5000);
-            setTimeout(() => el.classList.remove("highlight"), 6000);
-
-            el.click();
+            if (el) {
+                el.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+                document.querySelectorAll(".highlight, .blink").forEach(b => b.classList.remove("highlight", "blink"));
+                el.classList.add("highlight", "blink");
+                setTimeout(() => el.classList.remove("highlight", "blink"), 5000);
+                el.click();
+            }
             suggestions.style.display = "none";
         };
-
         suggestions.appendChild(div);
     });
 });
 
-/* =========================
-   REPORT (SAFE)
-========================= */
-reportBtn.onclick = () => {
-
-    if (!allData.length) {
-        alert("No data loaded");
-        return;
-    }
-
-    const summary = {
-        total: 0,
-        available: 0,
-        sold: 0,
-        booked: 0,
-        agent: 0,
-        size: 0
-    };
-
-    allData.forEach(x => {
-        summary.total++;
-        summary[x.status] = (summary[x.status] || 0) + 1;
-        summary.size += Number(x.size || 0);
-    });
-
-    panel.classList.remove("hidden");
-    panelContent.innerHTML = `
-        <h3>📊 REPORT</h3>
-        Total: ${summary.total}<br>
-        Available: ${summary.available || 0}<br>
-        Sold: ${summary.sold || 0}<br>
-        Booked: ${summary.booked || 0}<br>
-        Agent: ${summary.agent || 0}<br>
-        Size: ${summary.size}
-    `;
-};
-
-/* =========================
-   DRAG SAFE
-========================= */
 let isDown = false, startX, startY, scrollLeft, scrollTop;
-
 container.addEventListener("mousedown", (e) => {
     isDown = true;
-    startX = e.clientX;
-    startY = e.clientY;
-    scrollLeft = container.scrollLeft;
-    scrollTop = container.scrollTop;
+    startX = e.pageX; startY = e.pageY;
+    scrollLeft = container.scrollLeft; scrollTop = container.scrollTop;
 });
-
-document.addEventListener("mouseup", () => isDown = false);
-
-document.addEventListener("mousemove", (e) => {
+container.addEventListener("mouseup", () => isDown = false);
+container.addEventListener("mouseleave", () => isDown = false);
+container.addEventListener("mousemove", (e) => {
     if (!isDown) return;
-    container.scrollLeft = scrollLeft - (e.clientX - startX);
-    container.scrollTop = scrollTop - (e.clientY - startY);
+    container.scrollLeft = scrollLeft - (e.pageX - startX);
+    container.scrollTop = scrollTop - (e.pageY - startY);
 });
 
-/* INIT */
+document.getElementById("zoomIn").onclick = () => { zoomLevel += 0.1; floor.style.transform = `scale(${zoomLevel})`; };
+document.getElementById("zoomOut").onclick = () => { zoomLevel = Math.max(0.3, zoomLevel - 0.1); floor.style.transform = `scale(${zoomLevel})`; };
+
+document.addEventListener("click", () => {
+    panel.classList.add("hidden");
+    suggestions.style.display = "none";
+});
+
 loadData();
