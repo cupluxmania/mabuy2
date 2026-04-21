@@ -4,7 +4,6 @@ body {
     background: #f1f5f9;
 }
 
-/* HEADER */
 header {
     background: white;
     padding: 20px 40px;
@@ -17,7 +16,6 @@ header {
     padding: 20px 40px;
 }
 
-/* SEARCH */
 .searchWrapper {
     position: relative;
     margin-bottom: 20px;
@@ -38,7 +36,6 @@ header {
     box-shadow: 0 0 0 2px rgba(59,130,246,0.2);
 }
 
-/* DROPDOWN */
 #suggestions {
     position: absolute;
     width: 100%;
@@ -65,7 +62,6 @@ header {
     color: #1d4ed8;
 }
 
-/* LEGEND */
 #legend {
     display: flex;
     gap: 20px;
@@ -81,13 +77,11 @@ header {
     margin-right: 5px;
 }
 
-/* COLORS */
 .available { background: #3b82f6; }
 .sold { background: #ef4444; }
 .booked { background: #eab308; }
 .agent { background: #22c55e; }
 
-/* MENU */
 #menu {
     margin-bottom: 10px;
 }
@@ -101,11 +95,8 @@ button {
     transition: 0.2s;
 }
 
-button:hover {
-    background: #f1f5f9;
-}
+button:hover { background: #f1f5f9; }
 
-/* FLOOR */
 #floorContainer {
     height: 75vh;
     overflow: auto;
@@ -114,26 +105,50 @@ button:hover {
     border-radius: 10px;
 }
 
-#floorContainer:active {
-    cursor: grabbing;
-}
+#floorContainer:active { cursor: grabbing; }
 
 #floor {
     display: flex;
-    gap: 80px;
+    gap: 120px;
     padding: 120px;
     transform-origin: 0 0;
 }
 
-/* HALL */
+/* NEW HALL HEADER & SUMMARY STYLES */
 .hall {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 15px;
+}
+
+.hall-header {
+    display: flex;
+    align-items: center;
+    gap: 15px;
 }
 
 .hall h3 {
     margin: 0;
+    font-size: 22px;
+    font-weight: 800;
+}
+
+.hall-summary {
+    display: flex;
+    gap: 8px;
+}
+
+.count-chip {
+    display: flex;
+    align-items: center;
+    background: #f8fafc;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.count-chip strong {
+    margin-left: 10px;
     font-size: 18px;
 }
 
@@ -161,7 +176,6 @@ button:hover {
     transition: transform 0.2s ease;
 }
 
-/* TOOLTIP */
 .booth:hover::after {
     content: attr(data-tooltip);
     position: absolute;
@@ -176,36 +190,20 @@ button:hover {
     white-space: nowrap;
 }
 
-/* =========================
-   🔥 HIGHLIGHT (IMPROVED)
-========================= */
 .highlight {
     outline: 4px solid #facc15;
     outline-offset: 3px;
     z-index: 50 !important;
-    position: relative;
 }
 
-/* =========================
-   🔥 SMOOTH BLINK (NO JUMP)
-========================= */
 @keyframes blink {
-    0% {
-        box-shadow: 0 0 0 0 rgba(250,204,21,0.7);
-    }
-    50% {
-        box-shadow: 0 0 25px 10px rgba(250,204,21,0.9);
-    }
-    100% {
-        box-shadow: 0 0 0 0 rgba(250,204,21,0);
-    }
+    0% { box-shadow: 0 0 0 0 rgba(250,204,21,0.7); }
+    50% { box-shadow: 0 0 25px 10px rgba(250,204,21,0.9); }
+    100% { box-shadow: 0 0 0 0 rgba(250,204,21,0); }
 }
 
-.blink {
-    animation: blink 1s ease-in-out infinite;
-}
+.blink { animation: blink 1s ease-in-out infinite; }
 
-/* SIDE PANEL */
 #sidePanel {
     position: fixed;
     right: 20px;
@@ -217,11 +215,5 @@ button:hover {
     z-index: 2000;
 }
 
-.hidden {
-    display: none;
-}
-
-#panelContent b {
-    font-size: 12px;
-    color: #64748b;
-}
+.hidden { display: none; }
+#panelContent b { font-size: 12px; color: #64748b; }
