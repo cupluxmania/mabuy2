@@ -15,18 +15,9 @@ let zoomLevel = 1;
 ========================= */
 function cleanText(val) {
     if (!val) return "";
-
-    let text = String(val)
-        .replace(/\u00A0/g, " ")
-        .replace(/\s+/g, " ")
-        .trim();
-
+    let text = String(val).replace(/\u00A0/g, " ").replace(/\s+/g, " ").trim();
     const lower = text.toLowerCase();
-
-    if (["-", "n/a", "na", "null", "undefined"].includes(lower)) {
-        return "";
-    }
-
+    if (["-", "n/a", "na", "null", "undefined"].includes(lower)) return "";
     return text;
 }
 
@@ -34,28 +25,19 @@ function cleanText(val) {
    🔥 NORMALIZE ID
 ========================= */
 function normalizeId(id) {
-    return String(id || "")
-        .replace(/\u00A0/g, "")
-        .replace(/\s+/g, "")
-        .trim()
-        .toLowerCase();
+    return String(id || "").replace(/\u00A0/g, "").replace(/\s+/g, "").trim().toLowerCase();
 }
 
 /* =========================
    🔍 FALLBACK ANALYZER
 ========================= */
 function analyzeStatus(text) {
-
     const raw = cleanText(text);
-
     if (!raw) return "available";
-
     if (raw.toLowerCase().includes("agent")) return "agent";
-
     if (/[a-zA-Z]/.test(raw)) {
         return /[A-Z]/.test(raw) ? "sold" : "booked";
     }
-
     return "available";
 }
 
@@ -63,19 +45,13 @@ function analyzeStatus(text) {
    🎯 STATUS FROM SHEET
 ========================= */
 function getStatusFromSheet(row) {
-
     let status = cleanText(row.status).toLowerCase();
-
     if (status === "available") return "available";
     if (status === "booked") return "booked";
     if (status === "sold") return "sold";
     if (status.includes("agent")) return "agent";
 
-    const fallbackText = [
-        cleanText(row.helper),
-        cleanText(row.exhibitor)
-    ].join(" ");
-
+    const fallbackText = [cleanText(row.helper), cleanText(row.exhibitor)].join(" ");
     return analyzeStatus(fallbackText);
 }
 
@@ -94,19 +70,14 @@ function getColor(status){
 async function loadData() {
     const res = await fetch(`${G_SCRIPT_URL}?cmd=read&t=${Date.now()}`);
     const raw = await res.json();
-
     const expanded = [];
 
     raw.forEach(row => {
         if (!row.boothid) return;
-
         const booths = String(row.boothid).split(",");
-
         booths.forEach(id => {
-
             const boothIdClean = normalizeId(id);
             const finalStatus = getStatusFromSheet(row);
-
             expanded.push({
                 boothid: boothIdClean,
                 status: finalStatus,
@@ -119,18 +90,10 @@ async function loadData() {
     renderFloor();
 }
 
-/* =========================
-   GET VARIANTS (-A/-B)
-========================= */
 function getVariants(baseId) {
-    return allData.filter(x =>
-        normalizeId(x.boothid).startsWith(normalizeId(baseId) + "-")
-    );
+    return allData.filter(x => normalizeId(x.boothid).startsWith(normalizeId(baseId) + "-"));
 }
 
-/* =========================
-   FORMAT DISPLAY ID (🔥 NEW)
-========================= */
 function formatDisplayId(id) {
     return id.replace(/-([a-z])$/, (_, c) => "-" + c.toUpperCase());
 }
@@ -149,82 +112,94 @@ const hallConfig = [
 ];
 
 /* =========================
-   RENDER
+   RENDER (UPDATED FOR SUMMARY BAR)
 ========================= */
 function renderFloor() {
     floor.innerHTML = "";
 
     hallConfig.forEach(hall => {
-
         const hallDiv = document.createElement("div");
         hallDiv.className = "hall";
 
+        // Header containing Title and the Count Bar
+        const headerRow = document.createElement("div");
+        headerRow.className = "hall-header";
+
         const title = document.createElement("h3");
         title.innerText = hall.name;
-        hallDiv.appendChild(title);
+        headerRow.appendChild(title);
 
-        const grid = document.createElement("div");
-        grid.className = "grid";
-
+        const summary = document.createElement("div");
+        summary.className = "hall-summary";
+        
+        const boothElements = [];
         if (hall.name === "Ambulance") {
             for (let i = 65; i <= 90; i++) {
-                grid.appendChild(createBooth(String.fromCharCode(i)));
+                boothElements.push(createBooth(String.fromCharCode(i)));
             }
         } else {
             for (let i = hall.start; i <= hall.end; i++) {
-
                 const baseId = String(i);
                 const variants = getVariants(baseId);
-
                 if (variants.length > 0) {
-                    variants.forEach(v => {
-                        grid.appendChild(createBooth(v.boothid));
-                    });
+                    variants.forEach(v => boothElements.push(createBooth(v.boothid)));
                 } else {
-                    grid.appendChild(createBooth(baseId));
+                    boothElements.push(createBooth(baseId));
                 }
             }
         }
+
+        // Calculate Totals for this Hall
+        const counts = { available: 0, sold: 0, booked: 0, agent: 0 };
+        boothElements.forEach(el => {
+            const status = el.className.split(" ")[1];
+            if(counts[status] !== undefined) counts[status]++;
+        });
+
+        // Create the Count Chips (Available, Sold, Booked, Agent)
+        Object.keys(counts).forEach(status => {
+            const chip = document.createElement("div");
+            chip.className = "count-chip";
+            chip.innerHTML = `<span class="dot ${status}"></span> <strong>${counts[status]}</strong>`;
+            summary.appendChild(chip);
+        });
+
+        headerRow.appendChild(summary);
+        hallDiv.appendChild(headerRow);
+
+        const grid = document.createElement("div");
+        grid.className = "grid";
+        boothElements.forEach(be => grid.appendChild(be));
 
         hallDiv.appendChild(grid);
         floor.appendChild(hallDiv);
     });
 }
 
-/* =========================
-   CREATE BOOTH
-========================= */
 function createBooth(id) {
-
     const normId = normalizeId(id);
     const displayId = formatDisplayId(id);
-
     const b = document.createElement("div");
     b.className = "booth available";
     b.innerText = displayId;
     b.dataset.id = normId;
 
     const matches = allData.filter(x => x.boothid === normId);
-
     let finalStatus = "available";
     let exhibitorName = "";
 
     if (matches.length) {
-
         if (matches.some(x => x.status === "agent")) finalStatus = "agent";
         else if (matches.some(x => x.status === "sold")) finalStatus = "sold";
         else if (matches.some(x => x.status === "booked")) finalStatus = "booked";
-
         exhibitorName = matches.map(x => x.exhibitor).filter(Boolean).join(", ");
     }
 
     b.className = "booth " + finalStatus;
-
     b.dataset.tooltip = `${displayId} • ${finalStatus.toUpperCase()}${exhibitorName ? " • " + exhibitorName : ""}`;
 
     b.onclick = (e) => {
         e.stopPropagation();
-
         panel.classList.remove("hidden");
         panelContent.innerHTML = `
             <b>Booth:</b> ${displayId}<br>
@@ -232,99 +207,53 @@ function createBooth(id) {
             <b>Exhibitor:</b> ${exhibitorName || "-"}
         `;
     };
-
     return b;
 }
 
 /* =========================
-   SEARCH
+   SEARCH & DRAG & ZOOM (UNCHANGED)
 ========================= */
 searchBox.addEventListener("input", () => {
-
     const val = searchBox.value.toLowerCase();
-
-    const result = allData.filter(x =>
-        x.boothid.includes(val) ||
-        (x.exhibitor || "").toLowerCase().includes(val)
-    );
-
+    const result = allData.filter(x => x.boothid.includes(val) || (x.exhibitor || "").toLowerCase().includes(val));
     suggestions.innerHTML = "";
     suggestions.style.display = result.length ? "block" : "none";
-
     result.forEach(x => {
-
         const div = document.createElement("div");
         div.className = "suggestionItem";
         div.innerText = `${formatDisplayId(x.boothid)} - ${x.exhibitor}`;
-
         div.onclick = () => {
             const el = document.querySelector(`[data-id='${x.boothid}']`);
-
             if (el) {
-
-                el.scrollIntoView({
-                    behavior: "smooth",
-                    block: "center",
-                    inline: "center"
-                });
-
-                document.querySelectorAll(".highlight, .blink").forEach(b => {
-                    b.classList.remove("highlight", "blink");
-                });
-
+                el.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+                document.querySelectorAll(".highlight, .blink").forEach(b => b.classList.remove("highlight", "blink"));
                 el.classList.add("highlight", "blink");
-
-                setTimeout(() => {
-                    el.classList.remove("highlight", "blink");
-                }, 5000);
-
+                setTimeout(() => el.classList.remove("highlight", "blink"), 5000);
                 el.click();
             }
-
             suggestions.style.display = "none";
         };
-
         suggestions.appendChild(div);
     });
 });
 
-/* =========================
-   DRAG
-========================= */
 let isDown = false, startX, startY, scrollLeft, scrollTop;
-
 container.addEventListener("mousedown", (e) => {
     isDown = true;
-    startX = e.pageX;
-    startY = e.pageY;
-    scrollLeft = container.scrollLeft;
-    scrollTop = container.scrollTop;
+    startX = e.pageX; startY = e.pageY;
+    scrollLeft = container.scrollLeft; scrollTop = container.scrollTop;
 });
-
 container.addEventListener("mouseup", () => isDown = false);
 container.addEventListener("mouseleave", () => isDown = false);
-
 container.addEventListener("mousemove", (e) => {
     if (!isDown) return;
     container.scrollLeft = scrollLeft - (e.pageX - startX);
     container.scrollTop = scrollTop - (e.pageY - startY);
 });
 
-/* =========================
-   ZOOM
-========================= */
-document.getElementById("zoomIn").onclick = () => {
-    zoomLevel += 0.1;
-    floor.style.transform = `scale(${zoomLevel})`;
-};
-document.getElementById("zoomOut").onclick = () => {
-    zoomLevel = Math.max(0.3, zoomLevel - 0.1);
-    floor.style.transform = `scale(${zoomLevel})`;
-};
+document.getElementById("zoomIn").onclick = () => { zoomLevel += 0.1; floor.style.transform = `scale(${zoomLevel})`; };
+document.getElementById("zoomOut").onclick = () => { zoomLevel = Math.max(0.3, zoomLevel - 0.1); floor.style.transform = `scale(${zoomLevel})`; };
 
-/* =========================
-   CLOSE
-========================= */
 document.addEventListener("click", () => {
     panel.classList.add("hidden");
     suggestions.style.display = "none";
