@@ -12,7 +12,7 @@ let allData = [];
 let zoomLevel = 1;
 
 /* =========================
-   CLEAN
+   UTIL
 ========================= */
 function clean(val) {
     if (!val) return "";
@@ -34,43 +34,52 @@ function getStatus(row) {
 }
 
 /* =========================
-   GROUP DETECTOR (SAFE)
+   GROUP PARSER (SAFE)
+   - keeps -A / -B intact
+   - supports numeric ranges
 ========================= */
 function parseGroup(id) {
+
     id = String(id).trim();
 
-    // CASE 1: joined numeric range 5003-5005
-    if (id.includes("-") && /^\d/.test(id)) {
-        const parts = id.split("-").map(x => x.trim());
-
-        if (parts.every(p => /^\d+$/.test(p))) {
-            const start = Number(parts[0]);
-            const end = Number(parts[parts.length - 1]);
-
-            const members = [];
-            for (let i = start; i <= end; i++) {
-                members.push(String(i));
-            }
-
-            return { groupId: id, members };
-        }
-
-        // CASE 2: -A / -B style (IMPORTANT RESTORE)
+    // normal booth
+    if (!id.includes("-")) {
         return {
             groupId: id,
-            members: parts
+            members: [id]
         };
     }
 
-    // normal booth
+    const parts = id.split("-").map(x => x.trim());
+
+    // numeric range: 5003-5004-5005
+    if (parts.every(p => /^\d+$/.test(p))) {
+
+        const start = Number(parts[0]);
+        const end = Number(parts[parts.length - 1]);
+
+        const members = [];
+        for (let i = start; i <= end; i++) {
+            members.push(String(i));
+        }
+
+        return {
+            groupId: id,
+            members
+        };
+    }
+
+    // IMPORTANT: -A / -B stays grouped, NOT split into fake data
     return {
         groupId: id,
-        members: [id]
+        members: parts
     };
 }
 
 /* =========================
-   LOAD DATA
+   LOAD DATA (FIXED)
+   - NO data duplication
+   - NO breaking -A/-B
 ========================= */
 async function loadData() {
     const res = await fetch(`${G_SCRIPT_URL}?cmd=read&t=${Date.now()}`);
@@ -81,20 +90,17 @@ async function loadData() {
     raw.forEach(row => {
         if (!row.boothid) return;
 
-        String(row.boothid).split(",").forEach(id => {
+        String(row.boothid).split(",").forEach(group => {
 
-            const parsed = parseGroup(id);
+            const parsed = parseGroup(group);
 
-            parsed.members.forEach(member => {
-
-                temp.push({
-                    boothid: String(member).trim(),
-                    groupId: parsed.groupId,
-                    status: getStatus(row),
-                    exhibitor: clean(row.exhibitor),
-                    size: Number(row.size || row.sqm || 0)
-                });
-
+            // IMPORTANT: store 1 record per group ONLY
+            temp.push({
+                groupId: parsed.groupId,
+                members: parsed.members,
+                status: getStatus(row),
+                exhibitor: clean(row.exhibitor),
+                size: Number(row.size || row.sqm || 0)
             });
 
         });
@@ -102,6 +108,13 @@ async function loadData() {
 
     allData = temp;
     renderFloor();
+}
+
+/* =========================
+   FIND GROUP BY BOOTH
+========================= */
+function findGroup(id) {
+    return allData.find(g => g.members.includes(id));
 }
 
 /* =========================
@@ -118,7 +131,7 @@ const hallConfig = [
 ];
 
 /* =========================
-   RENDER
+   RENDER FLOOR
 ========================= */
 function renderFloor() {
     floor.innerHTML = "";
@@ -155,35 +168,31 @@ function renderFloor() {
 ========================= */
 function createBooth(id) {
 
-    const matches = allData.filter(x => x.boothid === id);
+    const group = findGroup(id);
 
     let status = "available";
     let exhibitor = "";
     let size = 0;
 
-    if (matches.length) {
+    if (group) {
 
-        if (matches.some(x => x.status === "agent")) status = "agent";
-        else if (matches.some(x => x.status === "sold")) status = "sold";
-        else if (matches.some(x => x.status === "booked")) status = "booked";
+        const members = group.members;
 
-        exhibitor = matches.map(x => x.exhibitor).filter(Boolean).join(", ");
+        if (group.status === "agent") status = "agent";
+        else if (group.status === "sold") status = "sold";
+        else if (group.status === "booked") status = "booked";
 
-        const group = allData.filter(x => x.groupId === matches[0]?.groupId);
+        exhibitor = group.exhibitor;
 
-        const totalSize = group.reduce((s, x) => s + x.size, 0);
-
-        if (group.length > 1) {
-            size = Math.round(totalSize / group.length); // auto split
-        } else {
-            size = totalSize;
-        }
+        // 🔥 AUTO SPLIT (DISPLAY ONLY)
+        size = members.length > 1
+            ? Math.round(group.size / members.length)
+            : group.size;
     }
 
     const b = document.createElement("div");
     b.className = "booth " + status;
 
-    // IMPORTANT: keep original ID (5035-A works again)
     b.innerText = id;
     b.dataset.id = id;
 
@@ -207,14 +216,14 @@ function createBooth(id) {
 }
 
 /* =========================
-   SEARCH (FIXED)
+   SEARCH
 ========================= */
 searchBox.addEventListener("input", () => {
 
     const val = searchBox.value.toLowerCase();
 
     const result = allData.filter(x =>
-        String(x.boothid).toLowerCase().includes(val) ||
+        x.members.some(m => m.toLowerCase().includes(val)) ||
         (x.exhibitor || "").toLowerCase().includes(val)
     );
 
@@ -225,11 +234,11 @@ searchBox.addEventListener("input", () => {
 
         const div = document.createElement("div");
         div.className = "suggestionItem";
-        div.innerText = `${x.boothid} - ${x.exhibitor}`;
+        div.innerText = `${x.groupId} - ${x.exhibitor}`;
 
         div.onclick = () => {
 
-            const el = document.querySelector(`[data-id='${x.boothid}']`);
+            const el = document.querySelector(`[data-id='${x.members[0]}']`);
             if (!el) return;
 
             el.scrollIntoView({ behavior: "smooth", block: "center" });
