@@ -22,7 +22,7 @@ function normalizeId(id) {
     return String(id || "").replace(/\s+/g, "").toLowerCase();
 }
 
-/* DISPLAY FORMAT */
+/* DISPLAY */
 function formatDisplayId(id) {
     return id.replace(/-([a-z])$/, (_, c) => "-" + c.toUpperCase());
 }
@@ -65,19 +65,99 @@ async function loadData() {
     renderFloor();
 }
 
-/* HALL DETECT */
-function getHall(id) {
-    const n = parseInt(id);
-    if (n >= 5000 && n < 6000) return "Hall 5";
-    if (n >= 6000 && n < 7000) return "Hall 6";
-    if (n >= 7000 && n < 8000) return "Hall 7";
-    if (n >= 8000 && n < 9000) return "Hall 8";
-    if (n >= 9000 && n < 10000) return "Hall 9";
-    if (n >= 1000 && n < 2000) return "Hall 10";
-    return "Other";
+/* VARIANTS */
+function getVariants(baseId) {
+    return allData.filter(x =>
+        x.boothid.startsWith(normalizeId(baseId) + "-")
+    );
 }
 
-/* REPORT DATA */
+/* HALL CONFIG */
+const hallConfig = [
+  {name:"Hall 5", start:5001, end:5078},
+  {name:"Hall 6", start:6001, end:6189},
+  {name:"Hall 7", start:7001, end:7196},
+  {name:"Hall 8", start:8001, end:8181},
+  {name:"Hall 9", start:9001, end:9191},
+  {name:"Hall 10", start:1001, end:1151}
+];
+
+/* RENDER FLOOR */
+function renderFloor() {
+    floor.innerHTML = "";
+
+    hallConfig.forEach(hall => {
+
+        const hallDiv = document.createElement("div");
+        hallDiv.className = "hall";
+
+        const title = document.createElement("h3");
+        title.innerText = hall.name;
+        hallDiv.appendChild(title);
+
+        const grid = document.createElement("div");
+        grid.className = "grid";
+
+        for (let i = hall.start; i <= hall.end; i++) {
+
+            const baseId = String(i);
+            const variants = getVariants(baseId);
+
+            if (variants.length > 0) {
+                variants.forEach(v => grid.appendChild(createBooth(v.boothid)));
+            } else {
+                grid.appendChild(createBooth(baseId));
+            }
+        }
+
+        hallDiv.appendChild(grid);
+        floor.appendChild(hallDiv);
+    });
+}
+
+/* CREATE BOOTH */
+function createBooth(id) {
+
+    const norm = normalizeId(id);
+    const display = formatDisplayId(id);
+
+    const b = document.createElement("div");
+    b.className = "booth available";
+    b.innerText = display;
+    b.dataset.id = norm;
+
+    const matches = allData.filter(x => x.boothid === norm);
+
+    let status = "available";
+    let exhibitor = "";
+
+    if (matches.length) {
+        if (matches.some(x => x.status === "agent")) status = "agent";
+        else if (matches.some(x => x.status === "sold")) status = "sold";
+        else if (matches.some(x => x.status === "booked")) status = "booked";
+
+        exhibitor = matches.map(x => x.exhibitor).filter(Boolean).join(", ");
+    }
+
+    b.className = "booth " + status;
+    b.dataset.tooltip = `${display} • ${status.toUpperCase()} ${exhibitor}`;
+
+    b.onclick = (e) => {
+        e.stopPropagation();
+
+        panel.classList.remove("hidden");
+        panelContent.innerHTML = `
+            <b>Booth:</b> ${display}<br>
+            <b>Status:</b> ${status.toUpperCase()}<br>
+            <b>Size:</b> ${matches[0]?.size || 0} sqm<br>
+            <b>Exhibitor:</b> ${exhibitor || "-"}
+        `;
+    };
+
+    return b;
+}
+
+/* REPORT */
 function generateReport() {
     const report = {};
 
@@ -95,30 +175,34 @@ function generateReport() {
     return report;
 }
 
+/* HALL DETECT */
+function getHall(id) {
+    const n = parseInt(id);
+    if (n >= 5000 && n < 6000) return "Hall 5";
+    if (n >= 6000 && n < 7000) return "Hall 6";
+    if (n >= 7000 && n < 8000) return "Hall 7";
+    if (n >= 8000 && n < 9000) return "Hall 8";
+    if (n >= 9000 && n < 10000) return "Hall 9";
+    if (n >= 1000 && n < 2000) return "Hall 10";
+    return "Other";
+}
+
 /* SHOW REPORT + CHART */
 function showReport() {
 
     const data = generateReport();
 
-    let html = `
-        <h3>📊 Hall Report</h3>
-        <canvas id="chartCanvas" height="200"></canvas>
-        <hr>
-    `;
+    let html = `<h3>📊 Hall Report</h3><canvas id="chartCanvas"></canvas><hr>`;
 
     Object.keys(data).forEach(hall => {
         const h = data[hall];
 
         html += `
-        <div style="margin-bottom:12px">
+        <div>
             <b>${hall}</b><br>
-            Available: ${h.available} |
-            Sold: ${h.sold} |
-            Booked: ${h.booked} |
-            Agent: ${h.agent}<br>
-            <b>Total Size: ${h.size} sqm</b>
-        </div>
-        `;
+            A:${h.available} | S:${h.sold} | B:${h.booked} | AG:${h.agent}<br>
+            Size: ${h.size} sqm
+        </div><br>`;
     });
 
     panel.classList.remove("hidden");
@@ -133,10 +217,6 @@ function renderChart(data) {
     const ctx = document.getElementById("chartCanvas");
 
     const labels = Object.keys(data);
-    const available = labels.map(h => data[h].available);
-    const sold = labels.map(h => data[h].sold);
-    const booked = labels.map(h => data[h].booked);
-    const agent = labels.map(h => data[h].agent);
 
     if (chartInstance) chartInstance.destroy();
 
@@ -145,65 +225,18 @@ function renderChart(data) {
         data: {
             labels,
             datasets: [
-                { label: 'Available', data: available, backgroundColor: '#3b82f6' },
-                { label: 'Sold', data: sold, backgroundColor: '#ef4444' },
-                { label: 'Booked', data: booked, backgroundColor: '#eab308' },
-                { label: 'Agent', data: agent, backgroundColor: '#22c55e' }
+                { label: 'Available', data: labels.map(h=>data[h].available), backgroundColor:'#3b82f6' },
+                { label: 'Sold', data: labels.map(h=>data[h].sold), backgroundColor:'#ef4444' },
+                { label: 'Booked', data: labels.map(h=>data[h].booked), backgroundColor:'#eab308' },
+                { label: 'Agent', data: labels.map(h=>data[h].agent), backgroundColor:'#22c55e' }
             ]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: { position: 'top' }
-            }
         }
     });
 }
 
-/* CREATE BOOTH */
-function createBooth(id) {
-
-    const norm = normalizeId(id);
-    const display = formatDisplayId(id);
-
-    const b = document.createElement("div");
-    b.className = "booth available";
-    b.innerText = display;
-    b.dataset.id = norm;
-
-    const match = allData.find(x => x.boothid === norm);
-
-    if (match) {
-        b.className = "booth " + match.status;
-        b.dataset.tooltip = `${display} • ${match.status.toUpperCase()} • ${match.exhibitor}`;
-    }
-
-    b.onclick = (e) => {
-        e.stopPropagation();
-
-        panel.classList.remove("hidden");
-        panelContent.innerHTML = `
-            <b>Booth:</b> ${display}<br>
-            <b>Status:</b> ${match?.status || "available"}<br>
-            <b>Size:</b> ${match?.size || 0} sqm<br>
-            <b>Exhibitor:</b> ${match?.exhibitor || "-"}
-        `;
-    };
-
-    return b;
-}
-
-/* RENDER */
-function renderFloor() {
-    floor.innerHTML = "";
-
-    for (let i = 5001; i <= 5078; i++) {
-        floor.appendChild(createBooth(String(i)));
-    }
-}
-
 /* SEARCH */
 searchBox.addEventListener("input", () => {
+
     const val = searchBox.value.toLowerCase();
 
     const result = allData.filter(x =>
@@ -215,6 +248,7 @@ searchBox.addEventListener("input", () => {
     suggestions.style.display = result.length ? "block" : "none";
 
     result.forEach(x => {
+
         const div = document.createElement("div");
         div.className = "suggestionItem";
         div.innerText = `${formatDisplayId(x.boothid)} - ${x.exhibitor}`;
@@ -246,5 +280,11 @@ document.getElementById("reportBtn").onclick = (e) => {
     e.stopPropagation();
     showReport();
 };
+
+/* CLOSE */
+document.addEventListener("click", () => {
+    panel.classList.add("hidden");
+    suggestions.style.display = "none";
+});
 
 loadData();
