@@ -32,7 +32,6 @@ header {
     font-size: 15px;
 }
 
-/* DROPDOWN */
 #suggestions {
     position: absolute;
     width: 100%;
@@ -48,7 +47,7 @@ header {
 }
 
 .suggestionItem {
-    padding: 12px 15px;
+    padding: 12px;
     cursor: pointer;
 }
 
@@ -67,9 +66,8 @@ header {
 .dot {
     width: 14px;
     height: 14px;
-    display: inline-block;
     border-radius: 4px;
-    margin-right: 5px;
+    display: inline-block;
 }
 
 /* COLORS */
@@ -106,6 +104,10 @@ header {
     gap: 10px;
 }
 
+.hall h3 {
+    margin: 0;
+}
+
 /* GRID */
 .grid {
     display: grid;
@@ -124,8 +126,8 @@ header {
     font-size: 11px;
     border-radius: 6px;
     cursor: pointer;
-    user-select: none;
     position: relative;
+    user-select: none;
 }
 
 /* TOOLTIP */
@@ -140,6 +142,7 @@ header {
     padding: 6px 10px;
     border-radius: 6px;
     font-size: 11px;
+    white-space: nowrap;
 }
 
 /* HIGHLIGHT */
@@ -175,18 +178,10 @@ header {
     display: none;
 }
 
-/* 🔥 REPORT OVERLAY FIX */
+/* REPORT FIX (IMPORTANT) */
 #reportLayer {
     position: absolute;
     inset: 0;
-    background: white;
     z-index: 1000;
-
-    /* IMPORTANT: allow drag pass-through */
     pointer-events: none;
-}
-
-/* Only chart clickable */
-#reportLayer canvas {
-    pointer-events: auto;
 }
