@@ -32,7 +32,7 @@ function cleanText(val) {
 }
 
 /* =========================
-   🔥 NORMALIZE ID (CRITICAL FIX)
+   🔥 NORMALIZE ID
 ========================= */
 function normalizeId(id) {
     return String(id || "")
@@ -43,39 +43,42 @@ function normalizeId(id) {
 }
 
 /* =========================
-   🔍 STATUS ANALYZER
+   🔍 FALLBACK ANALYZER (ONLY IF STATUS EMPTY)
 ========================= */
 function analyzeStatus(text) {
 
     const raw = cleanText(text);
-    const compact = raw.replace(/\s+/g, "");
 
-    let status = "available";
-    let reason = "";
+    if (!raw) return "available";
 
-    if (!compact) {
-        status = "available";
-        reason = "EMPTY";
-    }
-    else if (raw.toLowerCase().includes("agent")) {
-        status = "agent";
-        reason = "AGENT";
-    }
-    else if (/[a-zA-Z]/.test(raw)) {
-        if (/[A-Z]/.test(raw)) {
-            status = "sold";
-            reason = "UPPERCASE";
-        } else {
-            status = "booked";
-            reason = "LOWERCASE";
-        }
-    }
-    else {
-        status = "available";
-        reason = "NUMERIC";
+    if (raw.toLowerCase().includes("agent")) return "agent";
+
+    if (/[a-zA-Z]/.test(raw)) {
+        return /[A-Z]/.test(raw) ? "sold" : "booked";
     }
 
-    return { status, reason, raw };
+    return "available";
+}
+
+/* =========================
+   🎯 STATUS FROM SHEET (MAIN SOURCE)
+========================= */
+function getStatusFromSheet(row) {
+
+    let status = cleanText(row.status).toLowerCase();
+
+    if (status === "available") return "available";
+    if (status === "booked") return "booked";
+    if (status === "sold") return "sold";
+    if (status.includes("agent")) return "agent";
+
+    // 🔁 fallback only if empty or invalid
+    const fallbackText = [
+        cleanText(row.helper),
+        cleanText(row.exhibitor)
+    ].join(" ");
+
+    return analyzeStatus(fallbackText);
 }
 
 function getColor(status){
@@ -104,20 +107,16 @@ async function loadData() {
         booths.forEach(id => {
 
             const boothIdClean = normalizeId(id);
-
-            const textSource = [
-                cleanText(row.status),
-                cleanText(row.helper),
-                cleanText(row.exhibitor)
-            ].join(" ");
-
-            const analysis = analyzeStatus(textSource);
+            const finalStatus = getStatusFromSheet(row);
 
             expanded.push({
                 boothid: boothIdClean,
-                status: analysis.status,
+                status: finalStatus,
                 exhibitor: cleanText(row.exhibitor),
-                debug: analysis
+                debug: {
+                    raw: row.status,
+                    reason: "FROM SHEET"
+                }
             });
         });
     });
@@ -173,7 +172,7 @@ function renderFloor() {
 }
 
 /* =========================
-   CREATE BOOTH (FIXED MERGE)
+   CREATE BOOTH
 ========================= */
 function createBooth(id) {
 
@@ -188,26 +187,18 @@ function createBooth(id) {
 
     let finalStatus = "available";
     let exhibitorName = "";
-    let debugInfo = [];
 
     if (matches.length) {
 
-        // 🔥 PRIORITY MERGE
         if (matches.some(x => x.status === "agent")) finalStatus = "agent";
         else if (matches.some(x => x.status === "sold")) finalStatus = "sold";
         else if (matches.some(x => x.status === "booked")) finalStatus = "booked";
 
         exhibitorName = matches.map(x => x.exhibitor).filter(Boolean).join(", ");
-        debugInfo = matches.map(x => x.debug);
     }
 
     b.className = "booth " + finalStatus;
-
-    if (DEBUG && debugInfo.length) {
-        b.dataset.tooltip = debugInfo.map(d => `${d.raw} → ${d.reason}`).join(" | ");
-    } else {
-        b.dataset.tooltip = `${finalStatus.toUpperCase()} ${exhibitorName ? "• " + exhibitorName : ""}`;
-    }
+    b.dataset.tooltip = `${finalStatus.toUpperCase()} ${exhibitorName ? "• " + exhibitorName : ""}`;
 
     b.onclick = (e) => {
         e.stopPropagation();
@@ -216,8 +207,7 @@ function createBooth(id) {
         panelContent.innerHTML = `
             <b>Booth:</b> ${id}<br>
             <b>Status:</b> <span style="color:${getColor(finalStatus)}">${finalStatus.toUpperCase()}</span><br>
-            <b>Exhibitor:</b> ${exhibitorName || "-"}<br>
-            ${DEBUG ? `<hr>${debugInfo.map(d => `<div>${d.raw} → ${d.reason}</div>`).join("")}` : ""}
+            <b>Exhibitor:</b> ${exhibitorName || "-"}
         `;
     };
 
@@ -225,7 +215,7 @@ function createBooth(id) {
 }
 
 /* =========================
-   SEARCH (FIXED)
+   SEARCH
 ========================= */
 searchBox.addEventListener("input", () => {
 
@@ -256,17 +246,6 @@ searchBox.addEventListener("input", () => {
 
         suggestions.appendChild(div);
     });
-});
-
-/* =========================
-   DEBUG TOGGLE
-========================= */
-document.addEventListener("keydown", (e) => {
-    if (e.key === "d") {
-        DEBUG = !DEBUG;
-        renderFloor();
-        alert("DEBUG MODE: " + (DEBUG ? "ON" : "OFF"));
-    }
 });
 
 /* =========================
