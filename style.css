@@ -201,3 +201,13 @@ button:hover {
     font-size: 12px;
     color: #64748b;
 }
+
+@keyframes blink {
+    0% { transform: scale(1); box-shadow: 0 0 0px #facc15; }
+    50% { transform: scale(1.2); box-shadow: 0 0 20px #facc15; }
+    100% { transform: scale(1); box-shadow: 0 0 0px #facc15; }
+}
+
+.blink {
+    animation: blink 0.6s ease-in-out infinite;
+}
