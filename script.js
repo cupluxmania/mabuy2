@@ -55,7 +55,7 @@ function getColor(status){
 }
 
 /* =========================
-   LOAD DATA (UPDATED FOR SQM CALCULATION)
+   LOAD DATA
 ========================= */
 async function loadData() {
     const res = await fetch(`${G_SCRIPT_URL}?cmd=read&t=${Date.now()}`);
@@ -65,11 +65,8 @@ async function loadData() {
     raw.forEach(row => {
         if (!row.boothid) return;
         
-        // Split IDs (e.g. "5001, 5002")
         const booths = String(row.boothid).split(",").map(s => s.trim()).filter(Boolean);
         const count = booths.length;
-        
-        // Parse Size and divide by number of booths
         const totalSize = parseFloat(row.size) || 0;
         const individualSize = count > 0 ? (totalSize / count) : 0;
 
@@ -157,6 +154,9 @@ function renderFloor() {
     });
 }
 
+/* =========================
+   CREATE BOOTH (UPDATED TOOLTIP)
+========================= */
 function createBooth(id) {
     const normId = normalizeId(id);
     const displayId = formatDisplayId(id);
@@ -174,12 +174,16 @@ function createBooth(id) {
         if (matches.some(x => x.status === "agent")) finalStatus = "agent";
         else if (matches.some(x => x.status === "sold")) finalStatus = "sold";
         else if (matches.some(x => x.status === "booked")) finalStatus = "booked";
+        
         exhibitorName = matches.map(x => x.exhibitor).filter(Boolean).join(", ");
         sqm = matches[0].sqm;
     }
 
     b.className = "booth " + finalStatus;
-    b.dataset.tooltip = `${displayId} • ${sqm} Sqm • ${finalStatus.toUpperCase()}`;
+
+    // 🔥 UPDATED TOOLTIP: Displays Name + Size + Status
+    const tooltipExhibitor = exhibitorName ? ` • ${exhibitorName}` : "";
+    b.dataset.tooltip = `${displayId}${tooltipExhibitor} • ${sqm} Sqm • ${finalStatus.toUpperCase()}`;
 
     b.onclick = (e) => {
         e.stopPropagation();
