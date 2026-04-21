@@ -32,33 +32,35 @@ function getStatus(row) {
 }
 
 /* =========================
-   BOOTH PARSER (FIXED FOR YOUR API)
+   SAFE BOOTH PARSER
 ========================= */
 function parseBooths(raw) {
 
-    if (!raw) return { list: [] };
+    if (!raw) return [];
 
-    const cleaned = String(raw)
-        .replace(/\n/g, ",")   // 🔥 FIX newline issue
-        .replace(/\s+/g, " ")  // normalize spaces
+    const fixed = String(raw)
+        .replace(/\n/g, ",")
+        .replace(/\s+/g, " ")
         .trim();
 
-    return {
-        list: cleaned
-            .split(",")
-            .map(x => x.trim())
-            .filter(Boolean)
-    };
+    return fixed
+        .split(",")
+        .map(x => x.trim())
+        .filter(x => x.length > 0);
 }
 
 /* =========================
-   LOAD DATA (SAFE + STABLE)
+   LOAD DATA (DEBUG SAFE)
 ========================= */
 async function loadData() {
 
     try {
+        console.log("Loading API...");
+
         const res = await fetch(`${G_SCRIPT_URL}?cmd=read&t=${Date.now()}`);
         const raw = await res.json();
+
+        console.log("RAW API:", raw);
 
         const temp = [];
 
@@ -66,19 +68,15 @@ async function loadData() {
 
             if (!row.boothid || !String(row.boothid).trim()) return;
 
-            const group = parseBooths(row.boothid);
+            const booths = parseBooths(row.boothid);
 
             const totalSize = Number(row.size || 0);
-            const perSize = group.list.length ? totalSize / group.list.length : totalSize;
+            const perSize = booths.length ? totalSize / booths.length : totalSize;
 
-            group.list.forEach(id => {
-
-                const boothId = String(id).trim();
-
-                if (!boothId) return;
+            booths.forEach(id => {
 
                 temp.push({
-                    boothid: boothId,     // 🔥 NEVER MODIFIED (5035-A SAFE)
+                    boothid: id, // 🔥 RAW ONLY
                     status: getStatus(row),
                     exhibitor: clean(row.exhibitor),
                     size: perSize
@@ -87,18 +85,22 @@ async function loadData() {
         });
 
         allData = temp;
+
+        console.log("PARSED DATA:", allData);
+
         renderFloor();
 
     } catch (err) {
-        console.error("API ERROR:", err);
+        console.error("❌ LOAD FAILED:", err);
+        floor.innerHTML = "<h3 style='color:red'>Failed to load data</h3>";
     }
 }
 
 /* =========================
-   FIND (STRICT MATCH)
+   FIND
 ========================= */
 function find(id) {
-    return allData.filter(x => String(x.boothid) === String(id));
+    return allData.filter(x => x.boothid === id);
 }
 
 /* =========================
@@ -115,9 +117,15 @@ const hallConfig = [
 ];
 
 /* =========================
-   RENDER FLOOR
+   RENDER FLOOR (SAFE)
 ========================= */
 function renderFloor() {
+
+    if (!allData.length) {
+        console.warn("No data to render!");
+        floor.innerHTML = "<h3>No booth data found</h3>";
+        return;
+    }
 
     floor.innerHTML = "";
 
@@ -133,18 +141,11 @@ function renderFloor() {
         const grid = document.createElement("div");
         grid.className = "grid";
 
-        const processed = new Set();
-
         const make = (id) => {
 
-            const key = String(id);
+            const data = find(id)[0];
 
-            if (processed.has(key)) return;
-            processed.add(key);
-
-            const data = find(key)[0];
-
-            grid.appendChild(createBooth(key, data));
+            grid.appendChild(createBooth(id, data));
         };
 
         if (h.name === "Ambulance") {
@@ -163,7 +164,7 @@ function renderFloor() {
 }
 
 /* =========================
-   CREATE BOOTH
+   BOOTH
 ========================= */
 function createBooth(id, data) {
 
@@ -171,12 +172,11 @@ function createBooth(id, data) {
 
     const status = data?.status || "available";
     const exhibitor = data?.exhibitor || "";
-    const size = data?.size || 9;
+    const size = data?.size || 0;
 
     b.className = "booth " + status;
 
-    b.innerText = id; // 🔥 RAW ONLY (NO MODIFICATION EVER)
-
+    b.innerText = id;
     b.dataset.id = id;
 
     b.dataset.tooltip = `${status.toUpperCase()} • [ ${size} sqm ]`;
@@ -204,7 +204,7 @@ searchBox.addEventListener("input", () => {
     const val = searchBox.value.toLowerCase();
 
     const result = allData.filter(x =>
-        String(x.boothid).toLowerCase().includes(val) ||
+        x.boothid.toLowerCase().includes(val) ||
         (x.exhibitor || "").toLowerCase().includes(val)
     );
 
@@ -223,7 +223,6 @@ searchBox.addEventListener("input", () => {
             if (!el) return;
 
             el.scrollIntoView({ behavior: "smooth", block: "center" });
-
             el.classList.add("highlight", "blink");
 
             setTimeout(() => el.classList.remove("blink"), 5000);
@@ -238,42 +237,12 @@ searchBox.addEventListener("input", () => {
 });
 
 /* =========================
-   DRAG (FIXED)
+   REPORT (SAFE)
 ========================= */
-let isDown = false, startX, startY, scrollLeft, scrollTop;
-
-container.addEventListener("mousedown", (e) => {
-    isDown = true;
-    startX = e.clientX;
-    startY = e.clientY;
-    scrollLeft = container.scrollLeft;
-    scrollTop = container.scrollTop;
-    container.style.cursor = "grabbing";
-});
-
-document.addEventListener("mouseup", () => {
-    isDown = false;
-    container.style.cursor = "grab";
-});
-
-document.addEventListener("mousemove", (e) => {
-
-    if (!isDown) return;
-
-    e.preventDefault();
-
-    container.scrollLeft = scrollLeft - (e.clientX - startX);
-    container.scrollTop = scrollTop - (e.clientY - startY);
-});
-
-/* =========================
-   REPORT (FIXED + SAFE)
-========================= */
-reportBtn.onclick = (e) => {
-    e.stopPropagation();
+reportBtn.onclick = () => {
 
     if (!allData.length) {
-        alert("No data loaded. Check API.");
+        alert("No data loaded");
         return;
     }
 
@@ -286,62 +255,44 @@ reportBtn.onclick = (e) => {
         size: 0
     };
 
-    const hallReport = {};
-
     allData.forEach(x => {
-
-        const status = x.status || "available";
-        const hall = x.hall || "UNKNOWN";
-        const size = Number(x.size || 0);
-
         summary.total++;
-        summary[status] = (summary[status] || 0) + 1;
-        summary.size += size;
-
-        if (!hallReport[hall]) {
-            hallReport[hall] = {
-                total: 0,
-                available: 0,
-                sold: 0,
-                booked: 0,
-                agent: 0,
-                size: 0
-            };
-        }
-
-        hallReport[hall].total++;
-        hallReport[hall][status] = (hallReport[hall][status] || 0) + 1;
-        hallReport[hall].size += size;
+        summary[x.status] = (summary[x.status] || 0) + 1;
+        summary.size += Number(x.size || 0);
     });
 
-    let html = `
-        <h3>📊 OVERALL</h3>
+    panel.classList.remove("hidden");
+    panelContent.innerHTML = `
+        <h3>📊 REPORT</h3>
         Total: ${summary.total}<br>
         Available: ${summary.available || 0}<br>
         Sold: ${summary.sold || 0}<br>
         Booked: ${summary.booked || 0}<br>
         Agent: ${summary.agent || 0}<br>
         Size: ${summary.size}
-        <hr>
     `;
-
-    for (const h in hallReport) {
-        const r = hallReport[h];
-        html += `
-            <b>${h}</b><br>
-            Total: ${r.total}<br>
-            Available: ${r.available || 0}<br>
-            Sold: ${r.sold || 0}<br>
-            Booked: ${r.booked || 0}<br>
-            Agent: ${r.agent || 0}<br>
-            Size: ${r.size}
-            <hr>
-        `;
-    }
-
-    panel.classList.remove("hidden");
-    panelContent.innerHTML = html;
 };
+
+/* =========================
+   DRAG SAFE
+========================= */
+let isDown = false, startX, startY, scrollLeft, scrollTop;
+
+container.addEventListener("mousedown", (e) => {
+    isDown = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    scrollLeft = container.scrollLeft;
+    scrollTop = container.scrollTop;
+});
+
+document.addEventListener("mouseup", () => isDown = false);
+
+document.addEventListener("mousemove", (e) => {
+    if (!isDown) return;
+    container.scrollLeft = scrollLeft - (e.clientX - startX);
+    container.scrollTop = scrollTop - (e.clientY - startY);
+});
 
 /* INIT */
 loadData();
