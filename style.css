@@ -270,3 +270,41 @@ button:hover { background: #f1f5f9; }
     font-weight: bold;
     pointer-events: none;
 }
+
+/* MERGED VISUAL */
+.merged { border-radius: 0; }
+.merge-start { border-radius: 6px 0 0 6px; }
+.merge-end { border-radius: 0 6px 6px 0; }
+
+/* BADGE */
+.badge {
+    position: absolute;
+    top: 2px;
+    right: 4px;
+    background: #111;
+    color: white;
+    font-size: 10px;
+    padding: 2px 5px;
+    border-radius: 4px;
+}
+
+/* TYPE ARSIR */
+.type-space {
+    background-image: repeating-linear-gradient(
+        45deg,
+        rgba(255,255,255,0.15),
+        rgba(255,255,255,0.15) 4px,
+        transparent 4px,
+        transparent 8px
+    );
+}
+
+.type-shell {
+    background-image: repeating-linear-gradient(
+        -45deg,
+        rgba(0,0,0,0.15),
+        rgba(0,0,0,0.15) 4px,
+        transparent 4px,
+        transparent 8px
+    );
+}
