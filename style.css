@@ -256,3 +256,17 @@ button:hover { background: #f1f5f9; }
             transparent 6px
         );
 }
+
+/* HELPER BADGE */
+.booth-badge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background: rgba(0,0,0,0.75);
+    color: white;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: bold;
+    pointer-events: none;
+}
