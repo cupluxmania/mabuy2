@@ -241,3 +241,12 @@ button:hover { background: #f1f5f9; }
 .type-shell {
     box-shadow: 0 0 0 3px #111827 inset;
 }
+
+/* TYPE BORDER */
+.type-space {
+    box-shadow: 0 0 0 3px #a855f7 inset;
+}
+
+.type-shell {
+    box-shadow: 0 0 0 3px #111827 inset;
+}
