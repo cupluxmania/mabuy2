@@ -13,42 +13,22 @@ let zoomLevel = 1;
 /* CLEAN */
 function cleanText(val) {
     if (!val) return "";
-    let text = String(val)
-        .replace(/\u00A0/g, " ")
-        .replace(/\s+/g, " ")
-        .trim();
-
-    const lower = text.toLowerCase();
-    if (["-", "n/a", "na", "null", "undefined"].includes(lower)) return "";
-    return text;
+    return String(val).replace(/\u00A0/g, " ").replace(/\s+/g, " ").trim();
 }
 
-/* NORMALIZE */
+/* NORMALIZE (ONLY FOR MATCHING) */
 function normalizeId(id) {
-    return String(id || "")
-        .replace(/\u00A0/g, "")
-        .replace(/\s+/g, "")
-        .trim()
-        .toLowerCase();
+    return String(id || "").replace(/\s+/g, "").toLowerCase();
 }
 
 /* STATUS */
-function getStatusFromSheet(row) {
-    let status = cleanText(row.status).toLowerCase();
-    if (status === "available") return "available";
-    if (status === "booked") return "booked";
-    if (status === "sold") return "sold";
-    if (status.includes("agent")) return "agent";
+function getStatus(row) {
+    const s = cleanText(row.status).toLowerCase();
+    if (s === "available") return "available";
+    if (s === "booked") return "booked";
+    if (s === "sold") return "sold";
+    if (s.includes("agent")) return "agent";
     return "available";
-}
-
-function getColor(status){
-    return {
-        available:"#3b82f6",
-        sold:"#ef4444",
-        booked:"#eab308",
-        agent:"#22c55e"
-    }[status];
 }
 
 /* LOAD DATA */
@@ -69,26 +49,29 @@ async function loadData() {
 
         const count = booths.length;
         const totalSize = parseFloat(row.size) || 0;
-        const individualSize = count > 0 ? (totalSize / count) : 0;
+        const eachSize = count > 0 ? totalSize / count : 0;
 
-        booths.forEach((id, index) => {
+        booths.forEach(id => {
             expanded.push({
-                boothid: normalizeId(id),
-                rawId: id,
-                status: getStatusFromSheet(row),
+                rawId: id, // KEEP ORIGINAL (5035-A stays)
+                normId: normalizeId(id),
+                baseId: normalizeId(id).split("-")[0],
+                status: getStatus(row),
                 exhibitor: cleanText(row.exhibitor),
-                sqm: individualSize,
-                type: cleanText(row.type),
-
-                // 🔥 helper badge data
+                sqm: eachSize,
                 groupSize: count,
-                groupIndex: index + 1
+                type: cleanText(row.type || "")
             });
         });
     });
 
     allData = expanded;
     renderFloor();
+}
+
+/* GROUP DETECTOR */
+function getGroup(baseId) {
+    return allData.filter(x => x.baseId === baseId);
 }
 
 /* HALL CONFIG */
@@ -102,76 +85,40 @@ const hallConfig = [
   {name:"Ambulance", start:"A", end:"Z"}
 ];
 
-/* VARIANTS */
-function getVariants(baseId) {
-    return allData.filter(x =>
-        normalizeId(x.boothid).startsWith(normalizeId(baseId) + "-")
-    );
-}
-
-function formatDisplayId(id) {
-    return id.replace(/-([a-z])$/, (_, c) => "-" + c.toUpperCase());
-}
-
 /* RENDER */
 function renderFloor() {
     floor.innerHTML = "";
 
     hallConfig.forEach(hall => {
-
         const hallDiv = document.createElement("div");
         hallDiv.className = "hall";
 
-        const headerRow = document.createElement("div");
-        headerRow.className = "hall-header";
-
         const title = document.createElement("h3");
         title.innerText = hall.name;
-        headerRow.appendChild(title);
-
-        const summary = document.createElement("div");
-        summary.className = "hall-summary";
-
-        const boothElements = [];
-
-        if (hall.name === "Ambulance") {
-            for (let i = 65; i <= 90; i++) {
-                boothElements.push(createBooth(String.fromCharCode(i)));
-            }
-        } else {
-            for (let i = hall.start; i <= hall.end; i++) {
-                const baseId = String(i);
-                const variants = getVariants(baseId);
-
-                if (variants.length > 0) {
-                    variants.forEach(v => boothElements.push(createBooth(v.rawId)));
-                } else {
-                    boothElements.push(createBooth(baseId));
-                }
-            }
-        }
-
-        const counts = { available: 0, sold: 0, booked: 0, agent: 0 };
-
-        boothElements.forEach(el => {
-            const status = el.className.split(" ")[1];
-            if (counts[status] !== undefined) counts[status]++;
-        });
-
-        Object.keys(counts).forEach(status => {
-            const chip = document.createElement("div");
-            chip.className = "count-chip";
-            chip.innerHTML = `<span class="dot ${status}"></span> <strong>${counts[status]}</strong>`;
-            summary.appendChild(chip);
-        });
-
-        headerRow.appendChild(summary);
-        hallDiv.appendChild(headerRow);
+        hallDiv.appendChild(title);
 
         const grid = document.createElement("div");
         grid.className = "grid";
 
-        boothElements.forEach(b => grid.appendChild(b));
+        if (hall.name === "Ambulance") {
+            for (let i = 65; i <= 90; i++) {
+                grid.appendChild(createBooth(String.fromCharCode(i)));
+            }
+        } else {
+            for (let i = hall.start; i <= hall.end; i++) {
+
+                const baseId = String(i);
+                const group = getGroup(baseId);
+
+                if (group.length > 0) {
+                    group.forEach((item, index) => {
+                        grid.appendChild(createBooth(item.rawId, group.length, index));
+                    });
+                } else {
+                    grid.appendChild(createBooth(baseId, 1, 0));
+                }
+            }
+        }
 
         hallDiv.appendChild(grid);
         floor.appendChild(hallDiv);
@@ -179,65 +126,64 @@ function renderFloor() {
 }
 
 /* CREATE BOOTH */
-function createBooth(id) {
+function createBooth(id, groupCount = 1, index = 0) {
 
-    const normId = normalizeId(id);
-    const displayId = formatDisplayId(id);
+    const norm = normalizeId(id);
+    const matches = allData.filter(x => x.normId === norm);
 
-    const b = document.createElement("div");
-    b.className = "booth available";
-    b.innerText = displayId;
-    b.dataset.id = normId;
-
-    const matches = allData.filter(x => x.boothid === normId);
-
-    let finalStatus = "available";
-    let exhibitorName = "";
+    let status = "available";
+    let exhibitor = "";
     let sqm = 0;
     let type = "";
-    let groupSize = 1;
-    let groupIndex = 1;
 
     if (matches.length) {
-        if (matches.some(x => x.status === "agent")) finalStatus = "agent";
-        else if (matches.some(x => x.status === "sold")) finalStatus = "sold";
-        else if (matches.some(x => x.status === "booked")) finalStatus = "booked";
+        if (matches.some(x => x.status === "agent")) status = "agent";
+        else if (matches.some(x => x.status === "sold")) status = "sold";
+        else if (matches.some(x => x.status === "booked")) status = "booked";
 
-        exhibitorName = matches.map(x => x.exhibitor).filter(Boolean).join(", ");
+        exhibitor = matches.map(x => x.exhibitor).filter(Boolean).join(", ");
         sqm = matches[0].sqm;
         type = matches[0].type;
-        groupSize = matches[0].groupSize || 1;
-        groupIndex = matches[0].groupIndex || 1;
     }
 
-    b.className = "booth " + finalStatus;
+    const b = document.createElement("div");
+    b.className = "booth " + status;
 
+    /* MERGE VISUAL */
+    if (groupCount > 1) {
+        b.classList.add("merged");
+        if (index === 0) b.classList.add("merge-start");
+        if (index === groupCount - 1) b.classList.add("merge-end");
+    }
+
+    /* TYPE ARSIR */
     if (type.toLowerCase().includes("space")) b.classList.add("type-space");
     if (type.toLowerCase().includes("shell")) b.classList.add("type-shell");
 
-    b.dataset.tooltip = exhibitorName
-        ? `${exhibitorName} [ ${sqm} Sqm ] [ ${type || "-"} ]`
-        : `AVAILABLE [ ${sqm || "-"} Sqm ]`;
+    b.innerText = id;
+    b.dataset.id = norm;
 
-    // 🔥 HELPER BADGE
-    if (groupSize > 1) {
+    /* TOOLTIP */
+    const typeLabel = type ? `[ ${type} ]` : "";
+    b.dataset.tooltip = `${exhibitor || "-"} [ ${sqm} Sqm ] ${typeLabel}`;
+
+    /* BADGE */
+    if (groupCount > 1 && index === 0) {
         const badge = document.createElement("div");
-        badge.className = "booth-badge";
-        badge.innerText = `${groupIndex}/${groupSize}`;
+        badge.className = "badge";
+        badge.innerText = groupCount;
         b.appendChild(badge);
     }
 
     b.onclick = (e) => {
         e.stopPropagation();
-
         panel.classList.remove("hidden");
-
         panelContent.innerHTML = `
-            <b>Booth:</b> ${displayId}<br>
+            <b>Booth:</b> ${id}<br>
             <b>Size:</b> ${sqm} Sqm<br>
             <b>Type:</b> ${type || "-"}<br>
-            <b>Status:</b> <span style="color:${getColor(finalStatus)}">${finalStatus.toUpperCase()}</span><br>
-            <b>Exhibitor:</b> ${exhibitorName || "-"}
+            <b>Status:</b> ${status.toUpperCase()}<br>
+            <b>Exhibitor:</b> ${exhibitor || "-"}
         `;
     };
 
@@ -249,7 +195,7 @@ searchBox.addEventListener("input", () => {
     const val = searchBox.value.toLowerCase();
 
     const result = allData.filter(x =>
-        x.boothid.includes(val) ||
+        x.normId.includes(val) ||
         (x.exhibitor || "").toLowerCase().includes(val)
     );
 
@@ -262,13 +208,16 @@ searchBox.addEventListener("input", () => {
         div.innerText = `${x.rawId} - ${x.exhibitor}`;
 
         div.onclick = () => {
-            const el = document.querySelector(`[data-id='${x.boothid}']`);
-            if (el) {
-                el.scrollIntoView({ behavior: "smooth", block: "center" });
-                el.classList.add("highlight", "blink");
-                setTimeout(() => el.classList.remove("highlight", "blink"), 5000);
-                el.click();
-            }
+            const el = document.querySelector(`[data-id='${x.normId}']`);
+            if (!el) return;
+
+            el.scrollIntoView({ behavior: "smooth", block: "center" });
+            el.classList.add("highlight", "blink");
+
+            setTimeout(() => el.classList.remove("blink"), 5000);
+            setTimeout(() => el.classList.remove("highlight"), 6000);
+
+            el.click();
             suggestions.style.display = "none";
         };
 
@@ -301,7 +250,6 @@ document.getElementById("zoomIn").onclick = () => {
     zoomLevel += 0.1;
     floor.style.transform = `scale(${zoomLevel})`;
 };
-
 document.getElementById("zoomOut").onclick = () => {
     zoomLevel = Math.max(0.3, zoomLevel - 0.1);
     floor.style.transform = `scale(${zoomLevel})`;
