@@ -82,7 +82,7 @@ async function loadData() {
     renderFloor();
 }
 
-/* HALL */
+/* HALL CONFIG */
 const hallConfig = [
   {name:"Hall 5", start:5001, end:5078},
   {name:"Hall 6", start:6001, end:6189},
@@ -104,7 +104,7 @@ function formatDisplayId(id) {
     return id.replace(/-([a-z])$/, (_, c) => "-" + c.toUpperCase());
 }
 
-/* RENDER */
+/* RENDER WITH SUMMARY (IMPORTANT FIX) */
 function renderFloor() {
     floor.innerHTML = "";
 
@@ -113,30 +113,59 @@ function renderFloor() {
         const hallDiv = document.createElement("div");
         hallDiv.className = "hall";
 
+        // HEADER ROW
+        const headerRow = document.createElement("div");
+        headerRow.className = "hall-header";
+
         const title = document.createElement("h3");
         title.innerText = hall.name;
-        hallDiv.appendChild(title);
+        headerRow.appendChild(title);
 
-        const grid = document.createElement("div");
-        grid.className = "grid";
+        const summary = document.createElement("div");
+        summary.className = "hall-summary";
+
+        const boothElements = [];
 
         if (hall.name === "Ambulance") {
             for (let i = 65; i <= 90; i++) {
-                grid.appendChild(createBooth(String.fromCharCode(i)));
+                boothElements.push(createBooth(String.fromCharCode(i)));
             }
         } else {
             for (let i = hall.start; i <= hall.end; i++) {
-
                 const baseId = String(i);
                 const variants = getVariants(baseId);
 
                 if (variants.length > 0) {
-                    variants.forEach(v => grid.appendChild(createBooth(v.rawId)));
+                    variants.forEach(v => boothElements.push(createBooth(v.rawId)));
                 } else {
-                    grid.appendChild(createBooth(baseId));
+                    boothElements.push(createBooth(baseId));
                 }
             }
         }
+
+        // COUNT STATUS (🔥 THIS IS YOUR TOP INDICATOR)
+        const counts = { available: 0, sold: 0, booked: 0, agent: 0 };
+
+        boothElements.forEach(el => {
+            const status = el.className.split(" ")[1];
+            if (counts[status] !== undefined) counts[status]++;
+        });
+
+        Object.keys(counts).forEach(status => {
+            const chip = document.createElement("div");
+            chip.className = "count-chip";
+            chip.innerHTML = `<span class="dot ${status}"></span> <strong>${counts[status]}</strong>`;
+            summary.appendChild(chip);
+        });
+
+        headerRow.appendChild(summary);
+        hallDiv.appendChild(headerRow);
+
+        // GRID
+        const grid = document.createElement("div");
+        grid.className = "grid";
+
+        boothElements.forEach(b => grid.appendChild(b));
 
         hallDiv.appendChild(grid);
         floor.appendChild(hallDiv);
@@ -173,7 +202,7 @@ function createBooth(id) {
 
     b.className = "booth " + finalStatus;
 
-    // TYPE COLOR
+    // TYPE BORDER
     if (type.toLowerCase().includes("space")) {
         b.classList.add("type-space");
     } else if (type.toLowerCase().includes("shell")) {
@@ -204,7 +233,6 @@ function createBooth(id) {
 
 /* SEARCH */
 searchBox.addEventListener("input", () => {
-
     const val = searchBox.value.toLowerCase();
 
     const result = allData.filter(x =>
@@ -216,30 +244,18 @@ searchBox.addEventListener("input", () => {
     suggestions.style.display = result.length ? "block" : "none";
 
     result.forEach(x => {
-
         const div = document.createElement("div");
         div.className = "suggestionItem";
         div.innerText = `${formatDisplayId(x.rawId)} - ${x.exhibitor}`;
 
         div.onclick = () => {
-
             const el = document.querySelector(`[data-id='${x.boothid}']`);
-
             if (el) {
                 el.scrollIntoView({ behavior: "smooth", block: "center" });
-
-                document.querySelectorAll(".highlight, .blink")
-                    .forEach(b => b.classList.remove("highlight", "blink"));
-
                 el.classList.add("highlight", "blink");
-
-                setTimeout(() => {
-                    el.classList.remove("highlight", "blink");
-                }, 5000);
-
+                setTimeout(() => el.classList.remove("highlight", "blink"), 5000);
                 el.click();
             }
-
             suggestions.style.display = "none";
         };
 
@@ -276,7 +292,7 @@ document.getElementById("zoomIn").onclick = () => {
 document.getElementById("zoomOut").onclick = () => {
     zoomLevel = Math.max(0.3, zoomLevel - 0.1);
     floor.style.transform = `scale(${zoomLevel})`;
-};
+});
 
 /* CLOSE */
 document.addEventListener("click", () => {
