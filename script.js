@@ -10,9 +10,7 @@ const panelContent = document.getElementById("panelContent");
 let allData = [];
 let zoomLevel = 1;
 
-/* =========================
-   CLEAN TEXT
-========================= */
+/* CLEAN */
 function cleanText(val) {
     if (!val) return "";
     let text = String(val).replace(/\u00A0/g, " ").replace(/\s+/g, " ").trim();
@@ -21,9 +19,7 @@ function cleanText(val) {
     return text;
 }
 
-/* =========================
-   NORMALIZE ID
-========================= */
+/* NORMALIZE */
 function normalizeId(id) {
     return String(id || "")
         .replace(/\u00A0/g, "")
@@ -32,27 +28,13 @@ function normalizeId(id) {
         .toLowerCase();
 }
 
-/* =========================
-   STATUS FROM SHEET
-========================= */
+/* STATUS */
 function getStatusFromSheet(row) {
     let status = cleanText(row.status).toLowerCase();
-
     if (status === "available") return "available";
     if (status === "booked") return "booked";
     if (status === "sold") return "sold";
     if (status.includes("agent")) return "agent";
-
-    const fallbackText = [cleanText(row.helper), cleanText(row.exhibitor)].join(" ");
-    const raw = cleanText(fallbackText);
-
-    if (!raw) return "available";
-    if (raw.toLowerCase().includes("agent")) return "agent";
-
-    if (/[a-zA-Z]/.test(raw)) {
-        return /[A-Z]/.test(raw) ? "sold" : "booked";
-    }
-
     return "available";
 }
 
@@ -65,9 +47,7 @@ function getColor(status){
     }[status];
 }
 
-/* =========================
-   LOAD DATA (UPDATED TYPE)
-========================= */
+/* LOAD DATA */
 async function loadData() {
     const res = await fetch(`${G_SCRIPT_URL}?cmd=read&t=${Date.now()}`);
     const raw = await res.json();
@@ -89,11 +69,11 @@ async function loadData() {
         booths.forEach(id => {
             expanded.push({
                 boothid: normalizeId(id),
-                rawId: id.trim(), // 🔥 keep original like 5035-A
+                rawId: id.trim(),
                 status: getStatusFromSheet(row),
                 exhibitor: cleanText(row.exhibitor),
                 sqm: individualSize,
-                type: cleanText(row.type) // ✅ NEW
+                type: cleanText(row.type)
             });
         });
     });
@@ -102,9 +82,7 @@ async function loadData() {
     renderFloor();
 }
 
-/* =========================
-   HALL CONFIG
-========================= */
+/* HALL */
 const hallConfig = [
   {name:"Hall 5", start:5001, end:5078},
   {name:"Hall 6", start:6001, end:6189},
@@ -115,9 +93,7 @@ const hallConfig = [
   {name:"Ambulance", start:"A", end:"Z"}
 ];
 
-/* =========================
-   VARIANTS (-A / -B)
-========================= */
+/* VARIANTS */
 function getVariants(baseId) {
     return allData.filter(x =>
         normalizeId(x.boothid).startsWith(normalizeId(baseId) + "-")
@@ -128,9 +104,7 @@ function formatDisplayId(id) {
     return id.replace(/-([a-z])$/, (_, c) => "-" + c.toUpperCase());
 }
 
-/* =========================
-   RENDER
-========================= */
+/* RENDER */
 function renderFloor() {
     floor.innerHTML = "";
 
@@ -169,9 +143,7 @@ function renderFloor() {
     });
 }
 
-/* =========================
-   CREATE BOOTH (WITH TYPE)
-========================= */
+/* CREATE BOOTH */
 function createBooth(id) {
 
     const normId = normalizeId(id);
@@ -190,7 +162,6 @@ function createBooth(id) {
     let type = "";
 
     if (matches.length) {
-
         if (matches.some(x => x.status === "agent")) finalStatus = "agent";
         else if (matches.some(x => x.status === "sold")) finalStatus = "sold";
         else if (matches.some(x => x.status === "booked")) finalStatus = "booked";
@@ -202,14 +173,17 @@ function createBooth(id) {
 
     b.className = "booth " + finalStatus;
 
-    // ✅ TOOLTIP WITH TYPE
-    b.dataset.tooltip = `
-${displayId}
-${exhibitorName || "-"}
-${sqm} Sqm
-${type || "-"}
-${finalStatus.toUpperCase()}
-    `;
+    // TYPE COLOR
+    if (type.toLowerCase().includes("space")) {
+        b.classList.add("type-space");
+    } else if (type.toLowerCase().includes("shell")) {
+        b.classList.add("type-shell");
+    }
+
+    // TOOLTIP
+    b.dataset.tooltip = exhibitorName
+        ? `${exhibitorName} [ ${sqm} Sqm ] [ ${type || "-"} ]`
+        : `AVAILABLE [ ${sqm || "-"} Sqm ]`;
 
     b.onclick = (e) => {
         e.stopPropagation();
@@ -228,9 +202,7 @@ ${finalStatus.toUpperCase()}
     return b;
 }
 
-/* =========================
-   SEARCH
-========================= */
+/* SEARCH */
 searchBox.addEventListener("input", () => {
 
     const val = searchBox.value.toLowerCase();
@@ -275,9 +247,7 @@ searchBox.addEventListener("input", () => {
     });
 });
 
-/* =========================
-   DRAG
-========================= */
+/* DRAG */
 let isDown = false, startX, startY, scrollLeft, scrollTop;
 
 container.addEventListener("mousedown", (e) => {
@@ -293,14 +263,11 @@ container.addEventListener("mouseleave", () => isDown = false);
 
 container.addEventListener("mousemove", (e) => {
     if (!isDown) return;
-
     container.scrollLeft = scrollLeft - (e.pageX - startX);
     container.scrollTop = scrollTop - (e.pageY - startY);
 });
 
-/* =========================
-   ZOOM
-========================= */
+/* ZOOM */
 document.getElementById("zoomIn").onclick = () => {
     zoomLevel += 0.1;
     floor.style.transform = `scale(${zoomLevel})`;
@@ -311,9 +278,7 @@ document.getElementById("zoomOut").onclick = () => {
     floor.style.transform = `scale(${zoomLevel})`;
 };
 
-/* =========================
-   CLOSE
-========================= */
+/* CLOSE */
 document.addEventListener("click", () => {
     panel.classList.add("hidden");
     suggestions.style.display = "none";
