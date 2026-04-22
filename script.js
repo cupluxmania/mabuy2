@@ -10,16 +10,24 @@ const panelContent = document.getElementById("panelContent");
 let allData = [];
 let zoomLevel = 1;
 
-/* CLEAN */
+/* =========================
+   CLEAN
+========================= */
 function cleanText(val) {
     if (!val) return "";
-    let text = String(val).replace(/\u00A0/g, " ").replace(/\s+/g, " ").trim();
+    let text = String(val)
+        .replace(/\u00A0/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
     const lower = text.toLowerCase();
     if (["-", "n/a", "na", "null", "undefined"].includes(lower)) return "";
     return text;
 }
 
-/* NORMALIZE */
+/* =========================
+   NORMALIZE (FOR MATCH ONLY)
+========================= */
 function normalizeId(id) {
     return String(id || "")
         .replace(/\u00A0/g, "")
@@ -28,13 +36,17 @@ function normalizeId(id) {
         .toLowerCase();
 }
 
-/* STATUS */
+/* =========================
+   STATUS
+========================= */
 function getStatusFromSheet(row) {
     let status = cleanText(row.status).toLowerCase();
+
     if (status === "available") return "available";
     if (status === "booked") return "booked";
     if (status === "sold") return "sold";
     if (status.includes("agent")) return "agent";
+
     return "available";
 }
 
@@ -47,7 +59,9 @@ function getColor(status){
     }[status];
 }
 
-/* LOAD DATA */
+/* =========================
+   LOAD DATA (🔥 FIXED)
+========================= */
 async function loadData() {
     const res = await fetch(`${G_SCRIPT_URL}?cmd=read&t=${Date.now()}`);
     const raw = await res.json();
@@ -58,6 +72,7 @@ async function loadData() {
         if (!row.boothid) return;
 
         const booths = String(row.boothid)
+            .replace(/\n/g, ",")   // 🔥 FIX newline
             .split(",")
             .map(s => s.trim())
             .filter(Boolean);
@@ -68,8 +83,8 @@ async function loadData() {
 
         booths.forEach(id => {
             expanded.push({
-                boothid: normalizeId(id),
-                rawId: id.trim(),
+                boothid: normalizeId(id), // for matching
+                rawId: id,                // KEEP ORIGINAL
                 status: getStatusFromSheet(row),
                 exhibitor: cleanText(row.exhibitor),
                 sqm: individualSize,
@@ -82,7 +97,9 @@ async function loadData() {
     renderFloor();
 }
 
-/* HALL CONFIG */
+/* =========================
+   HALL CONFIG
+========================= */
 const hallConfig = [
   {name:"Hall 5", start:5001, end:5078},
   {name:"Hall 6", start:6001, end:6189},
@@ -93,7 +110,9 @@ const hallConfig = [
   {name:"Ambulance", start:"A", end:"Z"}
 ];
 
-/* VARIANTS */
+/* =========================
+   VARIANTS (-A / -B)
+========================= */
 function getVariants(baseId) {
     return allData.filter(x =>
         normalizeId(x.boothid).startsWith(normalizeId(baseId) + "-")
@@ -104,7 +123,9 @@ function formatDisplayId(id) {
     return id.replace(/-([a-z])$/, (_, c) => "-" + c.toUpperCase());
 }
 
-/* RENDER WITH SUMMARY (IMPORTANT FIX) */
+/* =========================
+   RENDER FLOOR
+========================= */
 function renderFloor() {
     floor.innerHTML = "";
 
@@ -113,7 +134,7 @@ function renderFloor() {
         const hallDiv = document.createElement("div");
         hallDiv.className = "hall";
 
-        // HEADER ROW
+        // HEADER
         const headerRow = document.createElement("div");
         headerRow.className = "hall-header";
 
@@ -132,6 +153,7 @@ function renderFloor() {
             }
         } else {
             for (let i = hall.start; i <= hall.end; i++) {
+
                 const baseId = String(i);
                 const variants = getVariants(baseId);
 
@@ -143,7 +165,7 @@ function renderFloor() {
             }
         }
 
-        // COUNT STATUS (🔥 THIS IS YOUR TOP INDICATOR)
+        // COUNT
         const counts = { available: 0, sold: 0, booked: 0, agent: 0 };
 
         boothElements.forEach(el => {
@@ -172,7 +194,9 @@ function renderFloor() {
     });
 }
 
-/* CREATE BOOTH */
+/* =========================
+   CREATE BOOTH
+========================= */
 function createBooth(id) {
 
     const normId = normalizeId(id);
@@ -202,12 +226,9 @@ function createBooth(id) {
 
     b.className = "booth " + finalStatus;
 
-    // TYPE BORDER
-    if (type.toLowerCase().includes("space")) {
-        b.classList.add("type-space");
-    } else if (type.toLowerCase().includes("shell")) {
-        b.classList.add("type-shell");
-    }
+    // TYPE COLOR
+    if (type.toLowerCase().includes("space")) b.classList.add("type-space");
+    if (type.toLowerCase().includes("shell")) b.classList.add("type-shell");
 
     // TOOLTIP
     b.dataset.tooltip = exhibitorName
@@ -231,8 +252,11 @@ function createBooth(id) {
     return b;
 }
 
-/* SEARCH */
+/* =========================
+   SEARCH
+========================= */
 searchBox.addEventListener("input", () => {
+
     const val = searchBox.value.toLowerCase();
 
     const result = allData.filter(x =>
@@ -246,7 +270,7 @@ searchBox.addEventListener("input", () => {
     result.forEach(x => {
         const div = document.createElement("div");
         div.className = "suggestionItem";
-        div.innerText = `${formatDisplayId(x.rawId)} - ${x.exhibitor}`;
+        div.innerText = `${x.rawId} - ${x.exhibitor}`;
 
         div.onclick = () => {
             const el = document.querySelector(`[data-id='${x.boothid}']`);
@@ -263,7 +287,9 @@ searchBox.addEventListener("input", () => {
     });
 });
 
-/* DRAG */
+/* =========================
+   DRAG
+========================= */
 let isDown = false, startX, startY, scrollLeft, scrollTop;
 
 container.addEventListener("mousedown", (e) => {
@@ -283,7 +309,9 @@ container.addEventListener("mousemove", (e) => {
     container.scrollTop = scrollTop - (e.pageY - startY);
 });
 
-/* ZOOM */
+/* =========================
+   ZOOM
+========================= */
 document.getElementById("zoomIn").onclick = () => {
     zoomLevel += 0.1;
     floor.style.transform = `scale(${zoomLevel})`;
@@ -292,9 +320,11 @@ document.getElementById("zoomIn").onclick = () => {
 document.getElementById("zoomOut").onclick = () => {
     zoomLevel = Math.max(0.3, zoomLevel - 0.1);
     floor.style.transform = `scale(${zoomLevel})`;
-});
+};
 
-/* CLOSE */
+/* =========================
+   CLOSE
+========================= */
 document.addEventListener("click", () => {
     panel.classList.add("hidden");
     suggestions.style.display = "none";
