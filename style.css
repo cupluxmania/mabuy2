@@ -246,13 +246,13 @@ button:hover { background: #f1f5f9; }
             rgba(0,0,0,0.15) 0px,
             rgba(0,0,0,0.15) 2px,
             transparent 2px,
-            transparent 10px
+            transparent 6px
         ),
         repeating-linear-gradient(
             90deg,
             rgba(0,0,0,0.15) 0px,
             rgba(0,0,0,0.15) 2px,
             transparent 2px,
-            transparent 10px
+            transparent 6px
         );
 }
