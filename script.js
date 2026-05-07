@@ -4,262 +4,454 @@ const floor = document.getElementById("floor");
 const container = document.getElementById("floorContainer");
 const searchBox = document.getElementById("searchBox");
 const suggestions = document.getElementById("suggestions");
-const panel = document.getElementById("sidePanel");
+const zoomInBtn = document.getElementById("zoomIn");
+const zoomOutBtn = document.getElementById("zoomOut");
+const zoomLevelLabel = document.getElementById("zoomLevel");
+
+const sidePanel = document.getElementById("sidePanel");
 const panelContent = document.getElementById("panelContent");
 
-let allData = [];
+let allData = {};
+let chartInstance;
+let typeChartInstance;
 let zoomLevel = 1;
 
-/* CLEAN */
-function cleanText(val) {
-    if (!val) return "";
-    return String(val).replace(/\u00A0/g, " ").replace(/\s+/g, " ").trim();
-}
-
-/* NORMALIZE (ONLY FOR MATCHING) */
-function normalizeId(id) {
-    return String(id || "").replace(/\s+/g, "").toLowerCase();
-}
-
-/* STATUS */
-function getStatus(row) {
-    const s = cleanText(row.status).toLowerCase();
-    if (s === "available") return "available";
-    if (s === "booked") return "booked";
-    if (s === "sold") return "sold";
-    if (s.includes("agent")) return "agent";
-    return "available";
-}
-
-/* LOAD DATA */
-async function loadData() {
-    const res = await fetch(`${G_SCRIPT_URL}?cmd=read&t=${Date.now()}`);
-    const raw = await res.json();
-
-    const expanded = [];
-
-    raw.forEach(row => {
-        if (!row.boothid) return;
-
-        const booths = String(row.boothid)
-            .replace(/\n/g, ",")
-            .split(",")
-            .map(s => s.trim())
-            .filter(Boolean);
-
-        const count = booths.length;
-        const totalSize = parseFloat(row.size) || 0;
-        const eachSize = count > 0 ? totalSize / count : 0;
-
-        booths.forEach(id => {
-            expanded.push({
-                rawId: id, // KEEP ORIGINAL (5035-A stays)
-                normId: normalizeId(id),
-                baseId: normalizeId(id).split("-")[0],
-                status: getStatus(row),
-                exhibitor: cleanText(row.exhibitor),
-                sqm: eachSize,
-                groupSize: count,
-                type: cleanText(row.type || "")
-            });
-        });
-    });
-
-    allData = expanded;
-    renderFloor();
-}
-
-/* GROUP DETECTOR */
-function getGroup(baseId) {
-    return allData.filter(x => x.baseId === baseId);
-}
-
-/* HALL CONFIG */
-const hallConfig = [
-  {name:"Hall 5", start:5001, end:5078},
-  {name:"Hall 6", start:6001, end:6189},
-  {name:"Hall 7", start:7001, end:7196},
-  {name:"Hall 8", start:8001, end:8181},
-  {name:"Hall 9", start:9001, end:9191},
-  {name:"Hall 10", start:1001, end:1151},
-  {name:"Ambulance", start:"A", end:"Z"}
+const halls = [
+  { name: "Hall 5", start: 5001, end: 5078 },
+  { name: "Hall 6", start: 6001, end: 6189 },
+  { name: "Hall 7", start: 7001, end: 7196 },
+  { name: "Hall 8", start: 8001, end: 8181 },
+  { name: "Hall 9", start: 9001, end: 9191 },
+  { name: "Hall 10", start: 1001, end: 1151 },
+  { name: "Ambulance", start: "A", end: "J" }
 ];
 
-/* RENDER */
-function renderFloor() {
-    floor.innerHTML = "";
-
-    hallConfig.forEach(hall => {
-        const hallDiv = document.createElement("div");
-        hallDiv.className = "hall";
-
-        const title = document.createElement("h3");
-        title.innerText = hall.name;
-        hallDiv.appendChild(title);
-
-        const grid = document.createElement("div");
-        grid.className = "grid";
-
-        if (hall.name === "Ambulance") {
-            for (let i = 65; i <= 90; i++) {
-                grid.appendChild(createBooth(String.fromCharCode(i)));
-            }
-        } else {
-            for (let i = hall.start; i <= hall.end; i++) {
-
-                const baseId = String(i);
-                const group = getGroup(baseId);
-
-                if (group.length > 0) {
-                    group.forEach((item, index) => {
-                        grid.appendChild(createBooth(item.rawId, group.length, index));
-                    });
-                } else {
-                    grid.appendChild(createBooth(baseId, 1, 0));
-                }
-            }
-        }
-
-        hallDiv.appendChild(grid);
-        floor.appendChild(hallDiv);
-    });
+/* =========================
+   PAGE SWITCH
+========================= */
+function showPage(id){
+  document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
 }
 
-/* CREATE BOOTH */
-function createBooth(id, groupCount = 1, index = 0) {
+/* =========================
+   LOAD DATA
+========================= */
+async function loadData() {
+  const url = `${G_SCRIPT_URL}?cmd=read&t=${Date.now()}`;
 
-    const norm = normalizeId(id);
-    const matches = allData.filter(x => x.normId === norm);
+  try {
+    const res = await fetch(url, { method: "GET", cache: "no-cache" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const raw = await res.json();
+    if (!Array.isArray(raw)) throw new Error("Invalid JSON format");
 
-    let status = "available";
-    let exhibitor = "";
-    let sqm = 0;
-    let type = "";
+    processData(raw);
 
-    if (matches.length) {
-        if (matches.some(x => x.status === "agent")) status = "agent";
-        else if (matches.some(x => x.status === "sold")) status = "sold";
-        else if (matches.some(x => x.status === "booked")) status = "booked";
-
-        exhibitor = matches.map(x => x.exhibitor).filter(Boolean).join(", ");
-        sqm = matches[0].sqm;
-        type = matches[0].type;
+  } catch (err) {
+    try {
+      const proxy = "https://corsproxy.io/?";
+      const res = await fetch(proxy + encodeURIComponent(url));
+      if (!res.ok) throw new Error(`Proxy HTTP ${res.status}`);
+      const raw = await res.json();
+      processData(raw);
+    } catch (err2) {
+      document.body.innerHTML = `
+        <div style="padding:40px;font-family:Arial">
+          <h2>❌ DATA LOAD ERROR</h2>
+          <p>${err.message}</p>
+        </div>
+      `;
     }
+  }
+}
 
-    const b = document.createElement("div");
-    b.className = "booth " + status;
+/* =========================
+   PROCESS DATA
+========================= */
+function processData(raw){
+  const map = {};
 
-    /* MERGE VISUAL */
-    if (groupCount > 1) {
-        b.classList.add("merged");
-        if (index === 0) b.classList.add("merge-start");
-        if (index === groupCount - 1) b.classList.add("merge-end");
+  raw.forEach(r => {
+    if (!r.boothid) return;
+
+    const ids = String(r.boothid).split(",").map(x => x.trim());
+
+    ids.forEach(id => {
+      map[id] = {
+        boothid: id,
+        exhibitor: r.exhibitor || "",
+        type: r.type || "",
+        status: (r.status || "available").toLowerCase(),
+        sqm: r.size || 0
+      };
+    });
+  });
+
+  allData = map;
+  renderFloor();
+  updateDashboard();
+}
+
+/* =========================
+   FLOOR HELPERS
+========================= */
+function getVariants(baseId) {
+  return Object.keys(allData)
+    .filter(id => id.toLowerCase().startsWith(baseId.toLowerCase() + "-"))
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+}
+
+function getHallBoothIds(hall) {
+  const boothIds = [];
+
+  if (hall.name === "Ambulance") {
+    for (let i = 65; i <= 90; i++) {
+      boothIds.push(String.fromCharCode(i));
     }
+    return boothIds;
+  }
 
-    /* TYPE ARSIR */
-    if (type.toLowerCase().includes("space")) b.classList.add("type-space");
-    if (type.toLowerCase().includes("shell")) b.classList.add("type-shell");
+  for (let i = hall.start; i <= hall.end; i++) {
+    const baseId = String(i);
+    const variants = getVariants(baseId);
 
-    b.innerText = id;
-    b.dataset.id = norm;
-
-    /* TOOLTIP */
-    const typeLabel = type ? `[ ${type} ]` : "";
-    b.dataset.tooltip = `${exhibitor || "-"} [ ${sqm} Sqm ] ${typeLabel}`;
-
-    /* BADGE */
-    if (groupCount > 1 && index === 0) {
-        const badge = document.createElement("div");
-        badge.className = "badge";
-        badge.innerText = groupCount;
-        b.appendChild(badge);
+    if (variants.length) {
+      variants.forEach(v => boothIds.push(v));
+    } else {
+      boothIds.push(baseId);
     }
+  }
 
-    b.onclick = (e) => {
-        e.stopPropagation();
-        panel.classList.remove("hidden");
-        panelContent.innerHTML = `
-            <b>Booth:</b> ${id}<br>
-            <b>Size:</b> ${sqm} Sqm<br>
-            <b>Type:</b> ${type || "-"}<br>
-            <b>Status:</b> ${status.toUpperCase()}<br>
-            <b>Exhibitor:</b> ${exhibitor || "-"}
-        `;
+  return boothIds;
+}
+
+/* =========================
+   FLOOR RENDER
+========================= */
+function renderFloor(){
+  floor.innerHTML = "";
+
+  halls.forEach(h => {
+    const boothIds = getHallBoothIds(h);
+    const hallCounts = { sold: 0, booked: 0, available: 0, agent: 0 };
+
+    boothIds.forEach(id => {
+      const d = allData[id];
+      const status = d?.status || "available";
+      if (hallCounts[status] !== undefined) hallCounts[status]++;
+    });
+
+    const div = document.createElement("div");
+    div.className = "hall";
+
+    const header = document.createElement("div");
+    header.className = "hall-header";
+
+    const title = document.createElement("h3");
+    title.innerText = h.name;
+
+    const summary = document.createElement("div");
+    summary.className = "hall-summary";
+
+    summary.innerHTML = `
+      <div class="hall-chip"><span class="dot sold"></span>${hallCounts.sold}</div>
+      <div class="hall-chip"><span class="dot booked"></span>${hallCounts.booked}</div>
+      <div class="hall-chip"><span class="dot available"></span>${hallCounts.available}</div>
+      <div class="hall-chip"><span class="dot agent"></span>${hallCounts.agent}</div>
+    `;
+
+    header.appendChild(title);
+    header.appendChild(summary);
+    div.appendChild(header);
+
+    const grid = document.createElement("div");
+    grid.className = "grid";
+
+    boothIds.forEach(id => grid.appendChild(createBooth(id)));
+
+    div.appendChild(grid);
+    floor.appendChild(div);
+  });
+}
+
+function createBooth(id){
+  const d = allData[id];
+
+  const b = document.createElement("div");
+  b.className = "booth " + (d?.status || "available");
+  b.innerText = id;
+
+  b.dataset.id = id.toLowerCase();
+  b.dataset.tooltip = `${id} • ${d?.exhibitor || "-"} • ${d?.type || "-"} • ${d?.sqm || 0} sqm`;
+
+  b.onclick = (e)=>{
+    e.stopPropagation();
+    sidePanel.classList.remove("hidden");
+    panelContent.innerHTML = `
+      <div class="panel-row"><span class="panel-label">Booth:</span> ${id}</div>
+      <div class="panel-row"><span class="panel-label">Exhibitor:</span> ${d?.exhibitor || "-"}</div>
+      <div class="panel-row"><span class="panel-label">Type:</span> ${d?.type || "-"}</div>
+      <div class="panel-row"><span class="panel-label">Status:</span> ${(d?.status || "available").toUpperCase()}</div>
+      <div class="panel-row"><span class="panel-label">Size:</span> ${d?.sqm || 0} sqm</div>
+    `;
+  };
+
+  return b;
+}
+
+/* =========================
+   SEARCH
+========================= */
+searchBox.addEventListener("input", ()=>{
+  const val = searchBox.value.toLowerCase();
+
+  if (!val) {
+    suggestions.style.display = "none";
+    return;
+  }
+
+  const result = Object.values(allData).filter(d =>
+    d.boothid.toLowerCase().includes(val) ||
+    (d.exhibitor || "").toLowerCase().includes(val)
+  );
+
+  suggestions.innerHTML = "";
+  suggestions.style.display = result.length ? "block" : "none";
+
+  result.slice(0,50).forEach(d => {
+    const div = document.createElement("div");
+    div.className = "suggestionItem";
+    div.innerText = `${d.boothid} - ${d.exhibitor}`;
+
+    div.onclick = () => {
+      goToBooth(d.boothid);
+      suggestions.style.display = "none";
     };
 
-    return b;
-}
-
-/* SEARCH */
-searchBox.addEventListener("input", () => {
-    const val = searchBox.value.toLowerCase();
-
-    const result = allData.filter(x =>
-        x.normId.includes(val) ||
-        (x.exhibitor || "").toLowerCase().includes(val)
-    );
-
-    suggestions.innerHTML = "";
-    suggestions.style.display = result.length ? "block" : "none";
-
-    result.forEach(x => {
-        const div = document.createElement("div");
-        div.className = "suggestionItem";
-        div.innerText = `${x.rawId} - ${x.exhibitor}`;
-
-        div.onclick = () => {
-            const el = document.querySelector(`[data-id='${x.normId}']`);
-            if (!el) return;
-
-            el.scrollIntoView({ behavior: "smooth", block: "center" });
-            el.classList.add("highlight", "blink");
-
-            setTimeout(() => el.classList.remove("blink"), 5000);
-            setTimeout(() => el.classList.remove("highlight"), 6000);
-
-            el.click();
-            suggestions.style.display = "none";
-        };
-
-        suggestions.appendChild(div);
-    });
+    suggestions.appendChild(div);
+  });
 });
 
-/* DRAG */
+/* =========================
+   JUMP
+========================= */
+function goToBooth(id){
+  const el = document.querySelector(`[data-id='${id.toLowerCase()}']`);
+  if (!el) return;
+
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+
+  document.querySelectorAll(".highlight,.pulse")
+    .forEach(x => x.classList.remove("highlight","pulse"));
+
+  el.classList.add("highlight","pulse");
+
+  setTimeout(() => el.classList.remove("highlight","pulse"), 5000);
+
+  el.click();
+}
+
+/* =========================
+   DASHBOARD
+========================= */
+function updateDashboard(){
+  let counts = { sold: 0, booked: 0, available: 0, agent: 0 };
+
+  const allTypes = new Set();
+  const hallTypeCounts = {};
+  const typeCounts = {};
+
+  const hallStats = halls.map(h => ({
+    name: h.name,
+    total: 0,
+    sold: 0,
+    booked: 0,
+    available: 0,
+    agent: 0
+  }));
+
+  Object.values(allData).forEach(d => {
+    if (counts[d.status] !== undefined) counts[d.status]++;
+
+    const type = d.type || "Unidentified";
+    allTypes.add(type);
+    typeCounts[type] = (typeCounts[type] || 0) + 1;
+
+    const hallName = getHallName(d.boothid);
+    hallTypeCounts[hallName] ??= {};
+    hallTypeCounts[hallName][type] = (hallTypeCounts[hallName][type] || 0) + 1;
+
+    const hall = hallStats.find(h => h.name === hallName);
+    if (hall) {
+      hall.total++;
+      if (hall[d.status] !== undefined) hall[d.status]++;
+    }
+  });
+
+  document.getElementById("totalCount").innerText = Object.keys(allData).length;
+  document.getElementById("soldCount").innerText = counts.sold;
+  document.getElementById("bookedCount").innerText = counts.booked;
+  document.getElementById("availableCount").innerText = counts.available;
+  document.getElementById("agentCount").innerText = counts.agent;
+
+  if (chartInstance) chartInstance.destroy();
+  chartInstance = new Chart(document.getElementById("chart"), {
+    type: "pie",
+    data: {
+      labels: ["Sold", "Booked", "Available", "Agent"],
+      datasets: [{
+        data: [counts.sold, counts.booked, counts.available, counts.agent],
+        backgroundColor: ["#ef4444", "#eab308", "#3b82f6", "#22c55e"]
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { position: "bottom" } }
+    }
+  });
+
+  if (typeChartInstance) typeChartInstance.destroy();
+  typeChartInstance = new Chart(document.getElementById("typeChart"), {
+    type: "bar",
+    data: {
+      labels: Object.keys(typeCounts),
+      datasets: [{
+        label: "Booth Types",
+        data: Object.values(typeCounts),
+        backgroundColor: "#6366f1"
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { autoSkip: false } },
+        y: { beginAtZero: true }
+      }
+    }
+  });
+
+  renderHallReport(hallStats);
+  renderTypeReport(hallTypeCounts, Array.from(allTypes).sort());
+}
+
+/* =========================
+   HELPERS
+========================= */
+function getHallName(id){
+  const trimmed = String(id).trim();
+  if (/^[A-Za-z]$/.test(trimmed)) return "Ambulance";
+  const num = parseInt(trimmed, 10);
+  if (Number.isNaN(num)) return "Unidentified";
+
+  const hall = halls.find(h => typeof h.start === "number" && num >= h.start && num <= h.end);
+  return hall ? hall.name : "Unidentified";
+}
+
+function renderHallReport(hallStats){
+  const rows = hallStats.map(h => `
+    <tr>
+      <td>${h.name}</td>
+      <td>${h.total}</td>
+      <td>${h.sold}</td>
+      <td>${h.booked}</td>
+      <td>${h.available}</td>
+      <td>${h.agent}</td>
+    </tr>
+  `).join("");
+
+  document.getElementById("hallReport").innerHTML = `
+    <h3>Hall Report</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Hall</th><th>Total</th><th>Sold</th><th>Booked</th><th>Available</th><th>Agent</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+function renderTypeReport(hallTypeCounts, types){
+  const rows = halls.map(h => {
+    const hallCounts = hallTypeCounts[h.name] || {};
+    const total = types.reduce((sum, type) => sum + (hallCounts[type] || 0), 0);
+    return `
+      <tr>
+        <td>${h.name}</td>
+        ${types.map(type => `<td>${hallCounts[type] || 0}</td>`).join("")}
+        <td>${total}</td>
+      </tr>
+    `;
+  }).join("");
+
+  const footerTotals = types.map(type =>
+    halls.reduce((sum, h) => sum + ((hallTypeCounts[h.name]?.[type]) || 0), 0)
+  );
+
+  const totalAll = footerTotals.reduce((sum, v) => sum + v, 0);
+
+  document.getElementById("typeReport").innerHTML = `
+    <h3>Type Report</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Hall</th>
+          ${types.map(type => `<th>${type}</th>`).join("")}
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+      <tfoot>
+        <tr>
+          <th>Total</th>
+          ${footerTotals.map(c => `<th>${c}</th>`).join("")}
+          <th>${totalAll}</th>
+        </tr>
+      </tfoot>
+    </table>
+  `;
+}
+
+/* =========================
+   ZOOM + DRAG + INIT
+========================= */
+function updateZoom(value){
+  zoomLevel = Math.min(2.5, Math.max(0.4, value));
+  floor.style.transform = `scale(${zoomLevel})`;
+  zoomLevelLabel.innerText = `${Math.round(zoomLevel * 100)}%`;
+}
+
+zoomInBtn?.addEventListener("click", () => updateZoom(zoomLevel + 0.1));
+zoomOutBtn?.addEventListener("click", () => updateZoom(zoomLevel - 0.1));
+
 let isDown = false, startX, startY, scrollLeft, scrollTop;
 
-container.addEventListener("mousedown", (e) => {
-    isDown = true;
-    startX = e.pageX;
-    startY = e.pageY;
-    scrollLeft = container.scrollLeft;
-    scrollTop = container.scrollTop;
+container.addEventListener("mousedown", e => {
+  isDown = true;
+  startX = e.pageX;
+  startY = e.pageY;
+  scrollLeft = container.scrollLeft;
+  scrollTop = container.scrollTop;
 });
 
 container.addEventListener("mouseup", () => isDown = false);
 container.addEventListener("mouseleave", () => isDown = false);
 
-container.addEventListener("mousemove", (e) => {
-    if (!isDown) return;
-    container.scrollLeft = scrollLeft - (e.pageX - startX);
-    container.scrollTop = scrollTop - (e.pageY - startY);
+container.addEventListener("mousemove", e => {
+  if (!isDown) return;
+  container.scrollLeft = scrollLeft - (e.pageX - startX);
+  container.scrollTop = scrollTop - (e.pageY - startY);
 });
 
-/* ZOOM */
-document.getElementById("zoomIn").onclick = () => {
-    zoomLevel += 0.1;
-    floor.style.transform = `scale(${zoomLevel})`;
-};
-document.getElementById("zoomOut").onclick = () => {
-    zoomLevel = Math.max(0.3, zoomLevel - 0.1);
-    floor.style.transform = `scale(${zoomLevel})`;
-};
-
-/* CLOSE */
 document.addEventListener("click", () => {
-    panel.classList.add("hidden");
-    suggestions.style.display = "none";
+  sidePanel.classList.add("hidden");
+  suggestions.style.display = "none";
 });
 
-/* INIT */
+/* START */
 loadData();
