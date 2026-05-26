@@ -22,7 +22,7 @@ const halls = [
   { name: "Hall 7", start: 7001, end: 7196 },
   { name: "Hall 8", start: 8001, end: 8181 },
   { name: "Hall 9", start: 9001, end: 9191 },
-  { name: "Hall 10", start: 1001, end: 1151 },
+  { name: "Hall 10", start: 1001, end: 1182 },
   { name: "Ambulance", start: "A", end: "J" }
 ];
 
