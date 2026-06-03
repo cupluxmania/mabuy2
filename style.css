@@ -376,9 +376,6 @@ header {
     padding: 22px;
     box-shadow: 0 2px 12px rgba(0,0,0,.06);
     border: 1px solid #e5e7eb;
-    min-height: 480px;
-    display: flex;
-    flex-direction: column;
 }
 
 .databaseChartCard h3 {
@@ -393,7 +390,7 @@ header {
 
 .databaseChartCard canvas {
     width: 100% !important;
-    flex: 1;
+    height: 430px !important;
 }
 
 /* ─── TABLES ───────────────────────────────────── */
