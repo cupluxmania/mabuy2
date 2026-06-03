@@ -2,456 +2,726 @@ const G_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzeXfwbFMaC8WH3th-
 
 const floor = document.getElementById("floor");
 const container = document.getElementById("floorContainer");
+
 const searchBox = document.getElementById("searchBox");
 const suggestions = document.getElementById("suggestions");
-const zoomInBtn = document.getElementById("zoomIn");
-const zoomOutBtn = document.getElementById("zoomOut");
-const zoomLevelLabel = document.getElementById("zoomLevel");
 
 const sidePanel = document.getElementById("sidePanel");
 const panelContent = document.getElementById("panelContent");
 
+const zoomInBtn = document.getElementById("zoomIn");
+const zoomOutBtn = document.getElementById("zoomOut");
+const zoomLevelLabel = document.getElementById("zoomLevel");
+
 let allData = {};
+
 let chartInstance;
-let typeChartInstance;
+let databaseChart1;
+let databaseChart2;
+
 let zoomLevel = 1;
 
 const halls = [
-  { name: "Hall 5", start: 5001, end: 5078 },
-  { name: "Hall 6", start: 6001, end: 6189 },
-  { name: "Hall 7", start: 7001, end: 7196 },
-  { name: "Hall 8", start: 8001, end: 8181 },
-  { name: "Hall 9", start: 9001, end: 9191 },
-  { name: "Hall 10", start: 1001, end: 1182 },
-  { name: "Ambulance", start: "A", end: "J" }
+    { name: "Hall 5", start: 5001, end: 5078 },
+    { name: "Hall 6", start: 6001, end: 6189 },
+    { name: "Hall 7", start: 7001, end: 7196 },
+    { name: "Hall 8", start: 8001, end: 8181 },
+    { name: "Hall 9", start: 9001, end: 9191 },
+    { name: "Hall 10", start: 1001, end: 1182 },
+    { name: "Ambulance", start: "A", end: "J" }
 ];
 
 /* =========================
    PAGE SWITCH
 ========================= */
 function showPage(id){
-  document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
-  document.getElementById(id).classList.add("active");
+
+    document.querySelectorAll(".page").forEach(page => {
+        page.classList.remove("active");
+    });
+
+    document.getElementById(id).classList.add("active");
+
+    // Active nav button highlight
+    document.querySelectorAll(".topNav button").forEach(btn => {
+        btn.classList.remove("active");
+        if(btn.getAttribute("onclick") && btn.getAttribute("onclick").includes(id)){
+            btn.classList.add("active");
+        }
+    });
 }
 
 /* =========================
-   LOAD DATA
+   LOAD FLOORPLAN DATA
 ========================= */
-async function loadData() {
-  const url = `${G_SCRIPT_URL}?cmd=read&t=${Date.now()}`;
+async function loadData(){
 
-  try {
-    const res = await fetch(url, { method: "GET", cache: "no-cache" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const raw = await res.json();
-    if (!Array.isArray(raw)) throw new Error("Invalid JSON format");
+    try{
 
-    processData(raw);
+        const response = await fetch(
+            `${G_SCRIPT_URL}?cmd=read&t=${Date.now()}`
+        );
 
-  } catch (err) {
-    try {
-      const proxy = "https://corsproxy.io/?";
-      const res = await fetch(proxy + encodeURIComponent(url));
-      if (!res.ok) throw new Error(`Proxy HTTP ${res.status}`);
-      const raw = await res.json();
-      processData(raw);
-    } catch (err2) {
-      document.body.innerHTML = `
-        <div style="padding:40px;font-family:Arial">
-          <h2>❌ DATA LOAD ERROR</h2>
-          <p>${err.message}</p>
-        </div>
-      `;
+        const raw = await response.json();
+
+        processData(raw);
+
+    }catch(error){
+
+        console.error(error);
+
     }
-  }
+}
+
+/* =========================
+   LOAD DATABASE
+========================= */
+async function loadDatabase(){
+
+    try{
+
+        const response = await fetch(
+            `${G_SCRIPT_URL}?cmd=database&t=${Date.now()}`
+        );
+
+        const data = await response.json();
+
+        const table1 = data.table1 || [];
+        const table2 = data.table2 || [];
+
+        renderDatabaseTable(
+            "databaseTable1",
+            table1
+        );
+
+        renderDatabaseTable(
+            "databaseTable2",
+            table2
+        );
+
+        renderDatabaseCharts(
+            table1,
+            table2
+        );
+
+    }catch(error){
+
+        console.error(error);
+
+    }
 }
 
 /* =========================
    PROCESS DATA
 ========================= */
 function processData(raw){
-  const map = {};
 
-  raw.forEach(r => {
-    if (!r.boothid) return;
+    const map = {};
 
-    const ids = String(r.boothid).split(",").map(x => x.trim());
+    raw.forEach(row => {
 
-    ids.forEach(id => {
-      map[id] = {
-        boothid: id,
-        exhibitor: r.exhibitor || "",
-        type: r.type || "",
-        status: (r.status || "available").toLowerCase(),
-        sqm: r.size || 0
-      };
+        if(!row.boothid) return;
+
+        const boothIds = String(row.boothid)
+            .split(",")
+            .map(x => x.trim());
+
+        boothIds.forEach(id => {
+
+            map[id] = {
+                boothid: id,
+                exhibitor: row.exhibitor || "",
+                type: row.type || "",
+                status: (row.status || "available").toLowerCase(),
+                sqm: row.size || 0
+            };
+
+        });
+
     });
-  });
 
-  allData = map;
-  renderFloor();
-  updateDashboard();
+    allData = map;
+
+    renderFloor();
+
+    updateDashboard();
 }
 
 /* =========================
-   FLOOR HELPERS
+   GET HALL BOOTHS
 ========================= */
-function getVariants(baseId) {
-  return Object.keys(allData)
-    .filter(id => id.toLowerCase().startsWith(baseId.toLowerCase() + "-"))
-    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-}
+function getHallBoothIds(hall){
 
-function getHallBoothIds(hall) {
-  const boothIds = [];
+    const boothIds = [];
 
-  if (hall.name === "Ambulance") {
-    for (let i = 65; i <= 90; i++) {
-      boothIds.push(String.fromCharCode(i));
-    }
+    Object.keys(allData).forEach(id => {
+
+        if(hall.name === "Ambulance"){
+
+            if(/^[A-Za-z]$/.test(id)){
+                boothIds.push(id);
+            }
+
+            return;
+        }
+
+        const base = String(id).split("-")[0];
+
+        const num = parseInt(base, 10);
+
+        if(Number.isNaN(num)) return;
+
+        if(num >= hall.start && num <= hall.end){
+            boothIds.push(id);
+        }
+
+    });
+
+    boothIds.sort((a, b) =>
+        a.localeCompare(
+            b,
+            undefined,
+            {
+                numeric: true,
+                sensitivity: "base"
+            }
+        )
+    );
+
     return boothIds;
-  }
-
-  for (let i = hall.start; i <= hall.end; i++) {
-    const baseId = String(i);
-    const variants = getVariants(baseId);
-
-    if (variants.length) {
-      variants.forEach(v => boothIds.push(v));
-    } else {
-      boothIds.push(baseId);
-    }
-  }
-
-  return boothIds;
 }
 
 /* =========================
-   FLOOR RENDER
+   RENDER FLOOR
 ========================= */
 function renderFloor(){
-  floor.innerHTML = "";
 
-  halls.forEach(h => {
-    const boothIds = getHallBoothIds(h);
-    const hallCounts = { sold: 0, booked: 0, available: 0, agent: 0 };
+    floor.innerHTML = "";
 
-    boothIds.forEach(id => {
-      const d = allData[id];
-      const status = d?.status || "available";
-      if (hallCounts[status] !== undefined) hallCounts[status]++;
+    halls.forEach(hall => {
+
+        const hallDiv = document.createElement("div");
+
+        hallDiv.className = "hall";
+
+        hallDiv.innerHTML = `
+            <div class="hall-header">
+                <h3>${hall.name}</h3>
+            </div>
+
+            <div class="grid"></div>
+        `;
+
+        const grid = hallDiv.querySelector(".grid");
+
+        const boothIds = getHallBoothIds(hall);
+
+        boothIds.forEach(id => {
+
+            const booth = createBooth(id);
+
+            grid.appendChild(booth);
+
+        });
+
+        floor.appendChild(hallDiv);
+
     });
-
-    const div = document.createElement("div");
-    div.className = "hall";
-
-    const header = document.createElement("div");
-    header.className = "hall-header";
-
-    const title = document.createElement("h3");
-    title.innerText = h.name;
-
-    const summary = document.createElement("div");
-    summary.className = "hall-summary";
-
-    summary.innerHTML = `
-      <div class="hall-chip"><span class="dot sold"></span>${hallCounts.sold}</div>
-      <div class="hall-chip"><span class="dot booked"></span>${hallCounts.booked}</div>
-      <div class="hall-chip"><span class="dot available"></span>${hallCounts.available}</div>
-      <div class="hall-chip"><span class="dot agent"></span>${hallCounts.agent}</div>
-    `;
-
-    header.appendChild(title);
-    header.appendChild(summary);
-    div.appendChild(header);
-
-    const grid = document.createElement("div");
-    grid.className = "grid";
-
-    boothIds.forEach(id => grid.appendChild(createBooth(id)));
-
-    div.appendChild(grid);
-    floor.appendChild(div);
-  });
 }
 
+/* =========================
+   CREATE BOOTH
+========================= */
 function createBooth(id){
-  const d = allData[id];
 
-  const b = document.createElement("div");
-  b.className = "booth " + (d?.status || "available");
-  b.innerText = id;
+    const data = allData[id];
 
-  b.dataset.id = id.toLowerCase();
-  b.dataset.tooltip = `${id} • ${d?.exhibitor || "-"} • ${d?.type || "-"} • ${d?.sqm || 0} sqm`;
+    const booth = document.createElement("div");
 
-  b.onclick = (e)=>{
-    e.stopPropagation();
-    sidePanel.classList.remove("hidden");
-    panelContent.innerHTML = `
-      <div class="panel-row"><span class="panel-label">Booth:</span> ${id}</div>
-      <div class="panel-row"><span class="panel-label">Exhibitor:</span> ${d?.exhibitor || "-"}</div>
-      <div class="panel-row"><span class="panel-label">Type:</span> ${d?.type || "-"}</div>
-      <div class="panel-row"><span class="panel-label">Status:</span> ${(d?.status || "available").toUpperCase()}</div>
-      <div class="panel-row"><span class="panel-label">Size:</span> ${d?.sqm || 0} sqm</div>
-    `;
-  };
+    booth.className =
+        "booth " + (data?.status || "available");
 
-  return b;
+    booth.innerText = id;
+
+    booth.dataset.id = id.toLowerCase();
+
+    booth.onclick = (event) => {
+
+        event.stopPropagation();
+
+        highlightBooth(booth);
+
+        sidePanel.classList.remove("hidden");
+
+        const status = data?.status || "available";
+
+        panelContent.innerHTML = `
+            <div class="panel-header">
+                <span class="panel-header-title">Booth ${id}</span>
+                <span class="status-badge ${status}">${status.toUpperCase()}</span>
+            </div>
+            <div class="panel-body">
+                <div class="panel-row">
+                    <span class="panel-label">Exhibitor</span>
+                    <span class="panel-value">${data?.exhibitor || "—"}</span>
+                </div>
+                <div class="panel-row">
+                    <span class="panel-label">Type</span>
+                    <span class="panel-value">${data?.type || "—"}</span>
+                </div>
+                <div class="panel-row">
+                    <span class="panel-label">Size</span>
+                    <span class="panel-value">${data?.sqm || 0} sqm</span>
+                </div>
+            </div>
+        `;
+    };
+
+    return booth;
+}
+
+/* =========================
+   BLINK EFFECT
+========================= */
+function highlightBooth(booth){
+
+    document.querySelectorAll(".booth").forEach(item => {
+        item.classList.remove("blink-booth");
+    });
+
+    booth.classList.add("blink-booth");
+
+    setTimeout(() => {
+
+        booth.classList.remove("blink-booth");
+
+    }, 5000);
 }
 
 /* =========================
    SEARCH
 ========================= */
-searchBox.addEventListener("input", ()=>{
-  const val = searchBox.value.toLowerCase();
+searchBox.addEventListener("input", () => {
 
-  if (!val) {
-    suggestions.style.display = "none";
-    return;
-  }
+    const value =
+        searchBox.value.toLowerCase();
 
-  const result = Object.values(allData).filter(d =>
-    d.boothid.toLowerCase().includes(val) ||
-    (d.exhibitor || "").toLowerCase().includes(val)
-  );
+    if(!value){
 
-  suggestions.innerHTML = "";
-  suggestions.style.display = result.length ? "block" : "none";
+        suggestions.style.display = "none";
 
-  result.slice(0,50).forEach(d => {
-    const div = document.createElement("div");
-    div.className = "suggestionItem";
-    div.innerText = `${d.boothid} - ${d.exhibitor}`;
+        return;
+    }
 
-    div.onclick = () => {
-      goToBooth(d.boothid);
-      suggestions.style.display = "none";
-    };
+    const result = Object.values(allData).filter(item => {
 
-    suggestions.appendChild(div);
-  });
+        return (
+            item.boothid.toLowerCase().includes(value) ||
+            item.exhibitor.toLowerCase().includes(value)
+        );
+
+    });
+
+    suggestions.innerHTML = "";
+
+    result.slice(0, 50).forEach(item => {
+
+        const div = document.createElement("div");
+
+        div.className = "suggestionItem";
+
+        div.innerText =
+            `${item.boothid} - ${item.exhibitor}`;
+
+        div.onclick = () => {
+
+            goToBooth(item.boothid);
+
+            suggestions.style.display = "none";
+        };
+
+        suggestions.appendChild(div);
+
+    });
+
+    suggestions.style.display =
+        result.length ? "block" : "none";
 });
 
 /* =========================
-   JUMP
+   GO TO BOOTH
 ========================= */
 function goToBooth(id){
-  const el = document.querySelector(`[data-id='${id.toLowerCase()}']`);
-  if (!el) return;
 
-  el.scrollIntoView({ behavior: "smooth", block: "center" });
+    const booth = document.querySelector(
+        `[data-id='${id.toLowerCase()}']`
+    );
 
-  document.querySelectorAll(".highlight,.pulse")
-    .forEach(x => x.classList.remove("highlight","pulse"));
+    if(!booth) return;
 
-  el.classList.add("highlight","pulse");
+    booth.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+        inline: "center"
+    });
 
-  setTimeout(() => el.classList.remove("highlight","pulse"), 5000);
+    highlightBooth(booth);
 
-  el.click();
+    booth.click();
 }
 
 /* =========================
-   DASHBOARD
+   UPDATE DASHBOARD
 ========================= */
 function updateDashboard(){
-  let counts = { sold: 0, booked: 0, available: 0, agent: 0 };
 
-  const allTypes = new Set();
-  const hallTypeCounts = {};
-  const typeCounts = {};
+    let sold = 0;
+    let booked = 0;
+    let available = 0;
+    let agent = 0;
 
-  const hallStats = halls.map(h => ({
-    name: h.name,
-    total: 0,
-    sold: 0,
-    booked: 0,
-    available: 0,
-    agent: 0
-  }));
+    Object.values(allData).forEach(item => {
 
-  Object.values(allData).forEach(d => {
-    if (counts[d.status] !== undefined) counts[d.status]++;
+        if(item.status === "sold") sold++;
+        if(item.status === "booked") booked++;
+        if(item.status === "available") available++;
+        if(item.status === "agent") agent++;
 
-    const type = d.type || "Unidentified";
-    allTypes.add(type);
-    typeCounts[type] = (typeCounts[type] || 0) + 1;
+    });
 
-    const hallName = getHallName(d.boothid);
-    hallTypeCounts[hallName] ??= {};
-    hallTypeCounts[hallName][type] = (hallTypeCounts[hallName][type] || 0) + 1;
-
-    const hall = hallStats.find(h => h.name === hallName);
-    if (hall) {
-      hall.total++;
-      if (hall[d.status] !== undefined) hall[d.status]++;
-    }
-  });
-
-  document.getElementById("totalCount").innerText = Object.keys(allData).length;
-  document.getElementById("soldCount").innerText = counts.sold;
-  document.getElementById("bookedCount").innerText = counts.booked;
-  document.getElementById("availableCount").innerText = counts.available;
-  document.getElementById("agentCount").innerText = counts.agent;
-
-  if (chartInstance) chartInstance.destroy();
-  chartInstance = new Chart(document.getElementById("chart"), {
-    type: "pie",
-    data: {
-      labels: ["Sold", "Booked", "Available", "Agent"],
-      datasets: [{
-        data: [counts.sold, counts.booked, counts.available, counts.agent],
-        backgroundColor: ["#ef4444", "#eab308", "#3b82f6", "#22c55e"]
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { position: "bottom" } }
-    }
-  });
-
-  if (typeChartInstance) typeChartInstance.destroy();
-  typeChartInstance = new Chart(document.getElementById("typeChart"), {
-    type: "bar",
-    data: {
-      labels: Object.keys(typeCounts),
-      datasets: [{
-        label: "Booth Types",
-        data: Object.values(typeCounts),
-        backgroundColor: "#6366f1"
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { ticks: { autoSkip: false } },
-        y: { beginAtZero: true }
-      }
-    }
-  });
-
-  renderHallReport(hallStats);
-  renderTypeReport(hallTypeCounts, Array.from(allTypes).sort());
+    renderDashboardCharts(
+        sold,
+        booked,
+        available,
+        agent
+    );
 }
 
 /* =========================
-   HELPERS
+   CHART OPTIONS
 ========================= */
-function getHallName(id){
-  const trimmed = String(id).trim();
-  if (/^[A-Za-z]$/.test(trimmed)) return "Ambulance";
-  const num = parseInt(trimmed, 10);
-  if (Number.isNaN(num)) return "Unidentified";
+function getChartOptions(){
 
-  const hall = halls.find(h => typeof h.start === "number" && num >= h.start && num <= h.end);
-  return hall ? hall.name : "Unidentified";
-}
+    return {
+        responsive: true,
+        maintainAspectRatio: false,
 
-function renderHallReport(hallStats){
-  const rows = hallStats.map(h => `
-    <tr>
-      <td>${h.name}</td>
-      <td>${h.total}</td>
-      <td>${h.sold}</td>
-      <td>${h.booked}</td>
-      <td>${h.available}</td>
-      <td>${h.agent}</td>
-    </tr>
-  `).join("");
+        plugins: {
 
-  document.getElementById("hallReport").innerHTML = `
-    <h3>Hall Report</h3>
-    <table>
-      <thead>
-        <tr>
-          <th>Hall</th><th>Total</th><th>Sold</th><th>Booked</th><th>Available</th><th>Agent</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>
-  `;
-}
+            legend: {
+                labels: {
+                    color: "#111827",
+                    font: {
+                        size: 15,
+                        weight: "bold"
+                    }
+                }
+            }
 
-function renderTypeReport(hallTypeCounts, types){
-  const rows = halls.map(h => {
-    const hallCounts = hallTypeCounts[h.name] || {};
-    const total = types.reduce((sum, type) => sum + (hallCounts[type] || 0), 0);
-    return `
-      <tr>
-        <td>${h.name}</td>
-        ${types.map(type => `<td>${hallCounts[type] || 0}</td>`).join("")}
-        <td>${total}</td>
-      </tr>
-    `;
-  }).join("");
+        },
 
-  const footerTotals = types.map(type =>
-    halls.reduce((sum, h) => sum + ((hallTypeCounts[h.name]?.[type]) || 0), 0)
-  );
+        scales: {
 
-  const totalAll = footerTotals.reduce((sum, v) => sum + v, 0);
+            x: {
+                ticks: {
+                    color: "#111827",
+                    font: {
+                        size: 14,
+                        weight: "bold"
+                    }
+                }
+            },
 
-  document.getElementById("typeReport").innerHTML = `
-    <h3>Type Report</h3>
-    <table>
-      <thead>
-        <tr>
-          <th>Hall</th>
-          ${types.map(type => `<th>${type}</th>`).join("")}
-          <th>Total</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-      <tfoot>
-        <tr>
-          <th>Total</th>
-          ${footerTotals.map(c => `<th>${c}</th>`).join("")}
-          <th>${totalAll}</th>
-        </tr>
-      </tfoot>
-    </table>
-  `;
+            y: {
+                ticks: {
+                    color: "#111827",
+                    font: {
+                        size: 14,
+                        weight: "bold"
+                    }
+                }
+            }
+
+        }
+
+    };
 }
 
 /* =========================
-   ZOOM + DRAG + INIT
+   DASHBOARD CHARTS
+========================= */
+function renderDashboardCharts(
+    sold,
+    booked,
+    available,
+    agent
+){
+
+    if(chartInstance){
+        chartInstance.destroy();
+    }
+
+    chartInstance = new Chart(
+        document.getElementById("chart"),
+        {
+            type: "pie",
+            data: {
+                labels: [
+                    "Sold",
+                    "Booked",
+                    "Available",
+                    "Agent"
+                ],
+                datasets: [{
+                    data: [
+                        sold,
+                        booked,
+                        available,
+                        agent
+                    ]
+                }]
+            },
+            options: getChartOptions()
+        }
+    );
+}
+
+/* =========================
+   DATABASE TABLE
+========================= */
+function renderDatabaseTable(id, data){
+
+    if(!data || !data.length) return;
+
+    const table = document.getElementById(id);
+
+    const thead =
+        table.querySelector("thead");
+
+    const tbody =
+        table.querySelector("tbody");
+
+    thead.innerHTML = `
+        <tr>
+            ${data[0]
+                .map(header => `<th>${header}</th>`)
+                .join("")}
+        </tr>
+    `;
+
+    tbody.innerHTML = data
+        .slice(1)
+        .map(row => `
+            <tr>
+                ${row
+                    .map(col => `<td>${col ?? ""}</td>`)
+                    .join("")}
+            </tr>
+        `)
+        .join("");
+}
+
+/* =========================
+   DATABASE CHARTS
+========================= */
+function renderDatabaseCharts(table1, table2){
+
+    const chartRows1 = table1.filter((row, index) => {
+
+        if(index === 0) return false;
+
+        return String(row[0]).toLowerCase() !== "total";
+
+    });
+
+    const labels = chartRows1.map(row => row[0]);
+
+    const sqmAvailable = chartRows1.map(row =>
+        Number(
+            String(row[3] || 0).replace(/,/g, "")
+        )
+    );
+
+    const standAvailable = chartRows1.map(row =>
+        Number(
+            String(row[6] || 0).replace(/,/g, "")
+        )
+    );
+
+    const exhibitorAvailable = chartRows1.map(row =>
+        Number(
+            String(row[9] || 0).replace(/,/g, "")
+        )
+    );
+
+    if(databaseChart1){
+        databaseChart1.destroy();
+    }
+
+    databaseChart1 = new Chart(
+        document.getElementById("databaseChart1"),
+        {
+            type: "bar",
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: "SQM Available",
+                        data: sqmAvailable
+                    },
+                    {
+                        label: "Stand Available",
+                        data: standAvailable
+                    },
+                    {
+                        label: "Booth Available",
+                        data: exhibitorAvailable
+                    }
+                ]
+            },
+            options: getChartOptions()
+        }
+    );
+
+    let local = 0;
+    let overseas = 0;
+
+    table2.forEach((row, index) => {
+
+        if(index === 0) return;
+
+        if(String(row[0]).toLowerCase() === "total"){
+            return;
+        }
+
+        local += Number(
+            String(row[5] || 0).replace(/,/g, "")
+        );
+
+        overseas += Number(
+            String(row[6] || 0).replace(/,/g, "")
+        );
+
+    });
+
+    if(databaseChart2){
+        databaseChart2.destroy();
+    }
+
+    databaseChart2 = new Chart(
+        document.getElementById("databaseChart2"),
+        {
+            type: "doughnut",
+            data: {
+                labels: [
+                    `Stand Local (${local})`,
+                    `Stand Overseas (${overseas})`
+                ],
+                datasets: [{
+                    data: [
+                        local,
+                        overseas
+                    ]
+                }]
+            },
+            options: getChartOptions()
+        }
+    );
+}
+
+/* =========================
+   ZOOM
 ========================= */
 function updateZoom(value){
-  zoomLevel = Math.min(2.5, Math.max(0.4, value));
-  floor.style.transform = `scale(${zoomLevel})`;
-  zoomLevelLabel.innerText = `${Math.round(zoomLevel * 100)}%`;
+
+    zoomLevel = Math.min(
+        2.5,
+        Math.max(0.4, value)
+    );
+
+    floor.style.transform =
+        `scale(${zoomLevel})`;
+
+    zoomLevelLabel.innerText =
+        `${Math.round(zoomLevel * 100)}%`;
 }
 
-zoomInBtn?.addEventListener("click", () => updateZoom(zoomLevel + 0.1));
-zoomOutBtn?.addEventListener("click", () => updateZoom(zoomLevel - 0.1));
+zoomInBtn.addEventListener("click", () => {
 
-let isDown = false, startX, startY, scrollLeft, scrollTop;
+    updateZoom(zoomLevel + 0.1);
 
-container.addEventListener("mousedown", e => {
-  isDown = true;
-  startX = e.pageX;
-  startY = e.pageY;
-  scrollLeft = container.scrollLeft;
-  scrollTop = container.scrollTop;
 });
 
-container.addEventListener("mouseup", () => isDown = false);
-container.addEventListener("mouseleave", () => isDown = false);
+zoomOutBtn.addEventListener("click", () => {
 
-container.addEventListener("mousemove", e => {
-  if (!isDown) return;
-  container.scrollLeft = scrollLeft - (e.pageX - startX);
-  container.scrollTop = scrollTop - (e.pageY - startY);
+    updateZoom(zoomLevel - 0.1);
+
 });
 
+/* =========================
+   DRAG SCROLL
+========================= */
+let isDown = false;
+
+let startX;
+let startY;
+
+let scrollLeft;
+let scrollTop;
+
+container.addEventListener("mousedown", event => {
+
+    isDown = true;
+
+    container.style.cursor = "grabbing";
+
+    startX = event.pageX;
+    startY = event.pageY;
+
+    scrollLeft = container.scrollLeft;
+    scrollTop = container.scrollTop;
+});
+
+container.addEventListener("mouseup", () => {
+
+    isDown = false;
+
+    container.style.cursor = "grab";
+
+});
+
+container.addEventListener("mouseleave", () => {
+
+    isDown = false;
+
+    container.style.cursor = "grab";
+
+});
+
+container.addEventListener("mousemove", event => {
+
+    if(!isDown) return;
+
+    container.scrollLeft =
+        scrollLeft - (event.pageX - startX);
+
+    container.scrollTop =
+        scrollTop - (event.pageY - startY);
+});
+
+/* =========================
+   HIDE PANEL
+========================= */
 document.addEventListener("click", () => {
-  sidePanel.classList.add("hidden");
-  suggestions.style.display = "none";
+
+    sidePanel.classList.add("hidden");
+
+    suggestions.style.display = "none";
 });
 
-/* START */
+/* =========================
+   START
+========================= */
 loadData();
+
+loadDatabase();
