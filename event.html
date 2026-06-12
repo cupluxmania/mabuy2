@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HOSPEX — Event</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<link rel="stylesheet" href="event.css">
+</head>
+<body>
+
+<header id="pageHeader">
+    <a href="index.html" class="back-btn">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+        All Events
+    </a>
+    <div class="header-divider"></div>
+    <div class="header-title" id="headerTitle">Loading…</div>
+    <div class="header-meta">
+        <span id="headerDates"></span>
+        <span id="headerStatus" class="header-status"></span>
+    </div>
+</header>
+
+<div class="topNav">
+    <button onclick="showPage('floorPage')" id="btnFloor" class="active">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M8 3v18M2 9h20M2 15h20"/></svg>
+        Floorplan
+    </button>
+    <button onclick="showPage('databasePage')" id="btnOverview">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg>
+        Overview
+    </button>
+</div>
+
+<!-- FLOOR PAGE -->
+<div id="floorPage" class="page active">
+
+    <div class="searchWrapper">
+        <input id="searchBox" placeholder="🔍 Search exhibitor or booth..." autocomplete="off">
+        <div id="suggestions"></div>
+    </div>
+
+    <div class="floorLegend" id="statusLegend">
+        <div class="legendItem available" data-filter="available" onclick="toggleFilter('available')">
+            <span class="dot available"></span>Available
+        </div>
+        <div class="legendItem sold" data-filter="sold" onclick="toggleFilter('sold')">
+            <span class="dot sold"></span>Sold
+        </div>
+        <div class="legendItem booked" data-filter="booked" onclick="toggleFilter('booked')">
+            <span class="dot booked"></span>Booked
+        </div>
+        <div class="legendItem local" data-filter="local" onclick="toggleFilter('local')">
+            <span class="dot local"></span>Local
+        </div>
+        <div class="legendItem overseas" data-filter="overseas" onclick="toggleFilter('overseas')">
+            <span class="dot overseas"></span>Overseas
+        </div>
+        <div class="legendItem green" data-filter="green" onclick="toggleFilter('green')">
+            <span class="dot green"></span>Green
+        </div>
+        <div class="legendItem white" data-filter="white" onclick="toggleFilter('white')">
+            <span class="dot white"></span>White
+        </div>
+        <div class="legendItem ambulance" data-filter="ambulance" onclick="toggleFilter('ambulance')">
+            <span class="dot ambulance"></span>Ambulance
+        </div>
+        <button class="legend-reset" id="statusResetBtn" onclick="resetFilter()" title="Clear all filters">
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            Reset
+        </button>
+        <div class="filter-count" id="filterCount" style="display:none">
+            <span id="filterCountNum">0</span> matched
+        </div>
+    </div>
+    <div class="floorLegend sqmLegendRow" id="sqmLegend" style="display:none">
+        <span class="sqm-legend-label">Size (sqm):</span>
+        <div id="sqmFilters" style="display:contents"></div>
+        <button class="legend-reset" id="sqmResetBtn" onclick="resetSqmFilter()" title="Clear size filters">
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            Reset
+        </button>
+    </div>
+
+    <div id="floorContainer">
+        <div id="floor">
+            <div class="empty-state">
+                <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M8 3v18M2 9h20M2 15h20"/></svg>
+                <p>Loading floorplan…</p>
+                <small>Fetching booth data</small>
+            </div>
+        </div>
+    </div>
+
+    <div id="zoomWidget" class="zoom-widget">
+        <button id="zoomOut">−</button>
+        <span id="zoomLevel">100%</span>
+        <button id="zoomIn">+</button>
+    </div>
+</div>
+
+<!-- OVERVIEW PAGE -->
+<div id="databasePage" class="page">
+    <div class="databaseWrapper">
+
+        <!-- Export Bar -->
+        <div class="exportBar">
+            <span class="exportLabel">Export data:</span>
+            <button class="exportBtn excel" onclick="exportExcel()">
+                <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+                Excel (.xlsx)
+            </button>
+            <button class="exportBtn pdf" onclick="exportPDF()">
+                <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/></svg>
+                PDF Report
+            </button>
+        </div>
+
+        <!-- KPI Row -->
+        <div class="kpiRow">
+            <div class="kpiCard kpi-sold">
+                <div class="kpi-num" id="kpi-sold">—</div>
+                <div class="kpi-label">Sold</div>
+            </div>
+            <div class="kpiCard kpi-booked">
+                <div class="kpi-num" id="kpi-booked">—</div>
+                <div class="kpi-label">Booked</div>
+            </div>
+            <div class="kpiCard kpi-avail">
+                <div class="kpi-num" id="kpi-avail">—</div>
+                <div class="kpi-label">Available</div>
+            </div>
+            <div class="kpiCard kpi-local">
+                <div class="kpi-num" id="kpi-local">—</div>
+                <div class="kpi-label">Local</div>
+            </div>
+            <div class="kpiCard kpi-overseas">
+                <div class="kpi-num" id="kpi-overseas">—</div>
+                <div class="kpi-label">Overseas</div>
+            </div>
+            <div class="kpiCard kpi-green">
+                <div class="kpi-num" id="kpi-green">—</div>
+                <div class="kpi-label">Green</div>
+            </div>
+            <div class="kpiCard kpi-white">
+                <div class="kpi-num" id="kpi-white">—</div>
+                <div class="kpi-label">White</div>
+            </div>
+            <div class="kpiCard kpi-ambulance">
+                <div class="kpi-num" id="kpi-ambulance">—</div>
+                <div class="kpi-label">Ambulance</div>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="databaseCharts">
+            <div class="databaseChartCard">
+                <h3>Booth Status</h3>
+                <canvas id="chart"></canvas>
+            </div>
+            <div class="databaseChartCard">
+                <h3>SQM / Stand / Booth</h3>
+                <canvas id="databaseChart1"></canvas>
+            </div>
+            <div class="databaseChartCard">
+                <h3>Local vs Overseas</h3>
+                <canvas id="databaseChart2"></canvas>
+            </div>
+        </div>
+
+        <!-- Tables -->
+        <div class="databaseGrid">
+            <div class="databaseTableCard">
+                <h3>Database Summary</h3>
+                <div class="tableScroll">
+                    <table id="databaseTable1"><thead></thead><tbody></tbody></table>
+                </div>
+            </div>
+            <div class="databaseTableCard">
+                <h3>Booth Type Summary</h3>
+                <div class="tableScroll">
+                    <table id="databaseTable2"><thead></thead><tbody></tbody></table>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- SIDE PANEL -->
+<div id="sidePanel" class="hidden">
+    <div id="panelContent"></div>
+</div>
+
+<script src="event.js"></script>
+</body>
+</html>

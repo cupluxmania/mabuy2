@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hospital Expo — Event Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="index.css">
+</head>
+<body>
+
+<header>
+    <div class="header-brand">HOSPEX</div>
+    <a class="header-sub" href="https://hospital-expo.com" target="_blank" rel="noopener">Event Organizations</a>
+</header>
+
+<div class="hero">
+    <div class="hero-eyebrow">Hospital Expo Events Hub</div>
+    <h1 class="hero-title">Hospital Expo Events @2026</h1>
+    <p class="hero-desc">Monitor floorplan status and booth sales across all active and upcoming hospital exhibitions in real time.</p>
+    <div class="stat-row">
+        <div class="stat-pill"><span class="num">5</span><span class="lbl">Events</span></div>
+        <div class="stat-pill"><span class="num" id="totalBooths">—</span><span class="lbl">Total Booths</span></div>
+        <div class="stat-pill"><span class="num" id="totalSold">—</span><span class="lbl">Sold</span></div>
+    </div>
+</div>
+
+<main>
+    <div class="section-header">
+        <span class="section-title">All Events</span>
+        <span class="section-count">5 events</span>
+    </div>
+
+    <div class="event-grid" id="eventGrid">
+
+        <!-- Cards injected by JS -->
+
+    </div>
+</main>
+
+<script src="index.js"></script>
+</body>
+</html>

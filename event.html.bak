@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HOSPEX — Event</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link rel="stylesheet" href="event.css">
+</head>
+<body>
+
+<header id="pageHeader">
+    <a href="index.html" class="back-btn">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+        All Events
+    </a>
+    <div class="header-divider"></div>
+    <div class="header-title" id="headerTitle">Loading…</div>
+    <div class="header-meta">
+        <span id="headerDates"></span>
+        <span id="headerStatus" class="header-status"></span>
+    </div>
+</header>
+
+<div class="topNav">
+    <button onclick="showPage('floorPage')" id="btnFloor" class="active">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M8 3v18M2 9h20M2 15h20"/></svg>
+        Floorplan
+    </button>
+    <button onclick="showPage('databasePage')" id="btnOverview">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg>
+        Overview
+    </button>
+</div>
+
+<!-- FLOOR PAGE -->
+<div id="floorPage" class="page active">
+
+    <div class="searchWrapper">
+        <input id="searchBox" placeholder="🔍 Search exhibitor or booth..." autocomplete="off">
+        <div id="suggestions"></div>
+    </div>
+
+    <div class="floorLegend">
+        <div class="legendItem available"><span class="dot available"></span>Available</div>
+        <div class="legendItem sold"><span class="dot sold"></span>Sold</div>
+        <div class="legendItem booked"><span class="dot booked"></span>Booked</div>
+        <div class="legendItem agent"><span class="dot agent"></span>Agent</div>
+    </div>
+
+    <div id="floorContainer">
+        <div id="floor">
+            <div class="empty-state">
+                <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M8 3v18M2 9h20M2 15h20"/></svg>
+                <p>Loading floorplan…</p>
+                <small>Fetching booth data</small>
+            </div>
+        </div>
+    </div>
+
+    <div id="zoomWidget" class="zoom-widget">
+        <button id="zoomOut">−</button>
+        <span id="zoomLevel">100%</span>
+        <button id="zoomIn">+</button>
+    </div>
+</div>
+
+<!-- OVERVIEW PAGE -->
+<div id="databasePage" class="page">
+    <div class="databaseWrapper">
+
+        <!-- KPI Row -->
+        <div class="kpiRow">
+            <div class="kpiCard kpi-sold">
+                <div class="kpi-num" id="kpi-sold">—</div>
+                <div class="kpi-label">Sold</div>
+            </div>
+            <div class="kpiCard kpi-booked">
+                <div class="kpi-num" id="kpi-booked">—</div>
+                <div class="kpi-label">Booked</div>
+            </div>
+            <div class="kpiCard kpi-avail">
+                <div class="kpi-num" id="kpi-avail">—</div>
+                <div class="kpi-label">Available</div>
+            </div>
+            <div class="kpiCard kpi-agent">
+                <div class="kpi-num" id="kpi-agent">—</div>
+                <div class="kpi-label">Agent</div>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="databaseCharts">
+            <div class="databaseChartCard">
+                <h3>Booth Status</h3>
+                <canvas id="chart"></canvas>
+            </div>
+            <div class="databaseChartCard">
+                <h3>SQM / Stand / Booth</h3>
+                <canvas id="databaseChart1"></canvas>
+            </div>
+            <div class="databaseChartCard">
+                <h3>Local vs Overseas</h3>
+                <canvas id="databaseChart2"></canvas>
+            </div>
+        </div>
+
+        <!-- Tables -->
+        <div class="databaseGrid">
+            <div class="databaseTableCard">
+                <h3>Database Summary</h3>
+                <div class="tableScroll">
+                    <table id="databaseTable1"><thead></thead><tbody></tbody></table>
+                </div>
+            </div>
+            <div class="databaseTableCard">
+                <h3>Booth Type Summary</h3>
+                <div class="tableScroll">
+                    <table id="databaseTable2"><thead></thead><tbody></tbody></table>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- SIDE PANEL -->
+<div id="sidePanel" class="hidden">
+    <div id="panelContent"></div>
+</div>
+
+<script src="event.js"></script>
+</body>
+</html>
