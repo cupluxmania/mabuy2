@@ -184,15 +184,25 @@ header {
     font-size: 13px;
     border: 1.5px solid transparent;
 }
-.legendItem.available { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
-.legendItem.sold      { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
-.legendItem.booked    { background: #fffbeb; color: #92400e; border-color: #fde68a; }
-.legendItem.agent     { background: #f0fdf4; color: #166534; border-color: #bbf7d0; }
+.legendItem.available  { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+.legendItem.sold       { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+.legendItem.booked     { background: #fffbeb; color: #92400e; border-color: #fde68a; }
+.legendItem.agent      { background: #f0fdf4; color: #166534; border-color: #bbf7d0; }
+.legendItem.local      { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+.legendItem.overseas   { background: #fff7ed; color: #c2410c; border-color: #fed7aa; }
+.legendItem.green      { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
+.legendItem.white      { background: #f8fafc; color: #475569; border-color: #cbd5e1; }
+.legendItem.ambulance  { background: #fdf4ff; color: #86198f; border-color: #e9d5ff; }
 .dot { width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0; }
-.dot.available { background: #3b82f6; }
-.dot.sold      { background: #ef4444; }
-.dot.booked    { background: #eab308; }
-.dot.agent     { background: #22c55e; }
+.dot.available  { background: #3b82f6; }
+.dot.sold       { background: #ef4444; }
+.dot.booked     { background: #eab308; }
+.dot.agent      { background: #22c55e; }
+.dot.local      { background: #3b82f6; }
+.dot.overseas   { background: #f97316; }
+.dot.green      { background: #22c55e; }
+.dot.white      { background: #94a3b8; }
+.dot.ambulance  { background: #a855f7; }
 
 /* ── LEGEND FILTER STATES ── */
 .legendItem {
@@ -1097,4 +1107,102 @@ tbody tr:hover { background: #f0f9ff; }
     display: block;
     padding: 28px 24px;
     gap: 0;
+}
+
+/* ── MAIN ROW (halls + food court side panel) ── */
+.intl-main-row {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    flex: 1;
+}
+
+/* Hall strip inside main row */
+.intl-main-row .intl-hall-strip {
+    flex: 1;
+    min-width: 0;
+}
+
+/* ── LOUNGE STRIP (above Hall 6 & 7 booths) ── */
+.intl-lounge-strip {
+    background: #d1fae5;
+    color: #065f46;
+    text-align: center;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 1.2px;
+    padding: 4px 6px;
+    border-bottom: 1.5px solid #6ee7b7;
+    text-transform: uppercase;
+}
+
+/* ── FOOD COURT SIDE PANEL ── */
+.intl-food-court {
+    width: 130px;
+    min-width: 130px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background: #fefce8;
+    border-left: 3px solid #fbbf24;
+}
+
+.intl-food-court-title {
+    background: #d97706;
+    color: white;
+    text-align: center;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.8px;
+    padding: 7px 6px;
+    text-transform: uppercase;
+    font-family: 'Syne', sans-serif;
+}
+
+.intl-food-court-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 16px 8px;
+}
+
+.intl-food-court-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #92400e;
+}
+
+.intl-food-court-sqm {
+    font-size: 13px;
+    font-weight: 800;
+    color: #d97706;
+}
+
+.intl-food-court-sub {
+    font-size: 9px;
+    font-weight: 600;
+    color: #78716c;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+}
+
+.intl-food-court-inout {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: center;
+    margin-top: 8px;
+}
+
+.intl-inout-badge {
+    background: #ef4444;
+    color: white;
+    font-size: 8px;
+    font-weight: 800;
+    padding: 2px 7px;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
 }
