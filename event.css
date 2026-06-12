@@ -891,3 +891,210 @@ tbody tr:hover { background: #f0f9ff; }
     width: 52px;
     height: 46px;
 }
+
+/* ════════════════════════════════════════
+   INT'L FLOORPLAN — CLUSTER LAYOUT v2
+   (5-booth clusters with gangway gaps)
+   ════════════════════════════════════════ */
+
+/* Top strip (single row, no clusters) */
+.intl-top-strip {
+    margin-bottom: 4px;
+    padding-bottom: 4px;
+    border-bottom: 2px dashed #94a3b8;
+}
+
+/* Block = one pair of top+bottom cluster rows */
+.intl-block {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* Override booth-row to not wrap */
+.intl-booth-row {
+    display: flex;
+    flex-direction: row;
+    gap: 4px;
+    flex-wrap: nowrap;
+    align-items: center;
+}
+
+/* Vertical gangway gap between clusters in a row */
+.intl-vgangway {
+    width: 20px;
+    min-width: 20px;
+    height: 46px;
+    background: repeating-linear-gradient(
+        90deg,
+        transparent 0px,
+        transparent 4px,
+        #cbd5e1 4px,
+        #cbd5e1 5px
+    );
+    border-radius: 3px;
+    flex-shrink: 0;
+    position: relative;
+}
+.intl-vgangway::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 2px;
+    height: 80%;
+    background: #94a3b8;
+    border-radius: 1px;
+}
+
+/* Booth sizing inside intl layout */
+.intl-hall-content .booth {
+    width: 54px;
+    height: 46px;
+    font-size: 9.5px;
+    font-weight: 700;
+    border-radius: 6px;
+    flex-shrink: 0;
+    line-height: 1.2;
+}
+
+.intl-hall-content .intl-empty-cell {
+    width: 54px;
+    height: 46px;
+    flex-shrink: 0;
+}
+
+/* Horizontal gangway between block rows */
+.intl-gangway {
+    height: 26px;
+    min-height: 26px;
+    background: linear-gradient(90deg,
+        #cbd5e1 0%,
+        #e2e8f0 15%,
+        #f1f5f9 50%,
+        #e2e8f0 85%,
+        #cbd5e1 100%
+    );
+    border-top: 1.5px dashed #94a3b8;
+    border-bottom: 1.5px dashed #94a3b8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+    margin: 3px 0;
+}
+
+.intl-gangway-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    color: #64748b;
+    text-transform: uppercase;
+    pointer-events: none;
+}
+
+/* Hall content spacing */
+.intl-hall-content {
+    display: flex;
+    flex-direction: column;
+    padding: 8px 10px 8px;
+    gap: 3px;
+    flex: 1;
+    background: #f0f4f8;
+}
+
+/* Hall itself */
+.intl-hall {
+    display: flex;
+    flex-direction: column;
+    background: #f0f4f8;
+    position: relative;
+    flex-shrink: 0;
+}
+
+/* Hall label */
+.intl-hall-label {
+    background: #0f172a;
+    color: white;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    padding: 7px 12px;
+    font-family: 'Syne', sans-serif;
+    border-bottom: 3px solid var(--stripe, #ef4444);
+}
+
+/* Hall entrance at bottom */
+.intl-entrance {
+    background: #1e3a8a;
+    color: #bfdbfe;
+    text-align: center;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    padding: 6px 8px;
+    border-top: 2px solid #3b82f6;
+}
+
+/* Hall divider */
+.intl-hall-divider {
+    width: 8px;
+    min-width: 8px;
+    flex-shrink: 0;
+    background: repeating-linear-gradient(
+        180deg,
+        #64748b 0px, #64748b 5px,
+        #94a3b8 5px, #94a3b8 10px
+    );
+}
+
+/* Building wrapper */
+.intl-building {
+    display: flex;
+    flex-direction: column;
+    background: #dde3ea;
+    border: 2.5px solid #64748b;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+    min-width: max-content;
+}
+
+/* Hall strip */
+.intl-hall-strip {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+}
+
+/* Top/bottom bars */
+.intl-top-bar {
+    background: #0f172a;
+    color: #7dd3fc;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    padding: 8px 16px;
+    border-bottom: 2px solid #3b82f6;
+}
+.intl-bottom-bar {
+    background: #0f172a;
+    color: #7dd3fc;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    padding: 8px 16px;
+    border-top: 2px solid #3b82f6;
+}
+
+/* Floor container override */
+#floor:has(.intl-building) {
+    display: block;
+    padding: 28px 24px;
+    gap: 0;
+}

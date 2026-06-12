@@ -311,90 +311,48 @@ function getHallBoothIds(hall) {
     return ids;
 }
 
-/* ── INTL FLOORPLAN LAYOUT CONFIG ──
-   Mirrors the real Hospex 2026 floorplan (ICE BSD, Halls 5–10).
+/* ════════════════════════════════════════════════════════════════
+   INT'L FLOORPLAN — EXACT LAYOUT ENGINE
+   ════════════════════════════════════════════════════════════════
 
-   Based on real analysis of the floorplan PDF:
-   • Hall 6 = 21 cols × 9 rows → 189 booths ✓
-   • Hall 7 = 20 cols × 9 rows → 180 + 16 extras → 20 cols + partial row
-   • Hall 8 = 20 cols × 9 rows → 181 booths ≈ ✓
-   • Hall 9 = 20 cols × 9 rows → 191 booths ≈ ✓
-   • Hall 10 = 20 cols × 9 rows → 182 booths ≈ ✓
-   • Hall 5 = smaller/narrower, 9 cols × 9 rows → 81 ≈ 78 booths
+   Reconstructed from the real ICE BSD Hospex 2026 floorplan image.
 
-   Real gangway pattern (9 rows total):
-   ┌─ Segment A: 2 rows ─┐
-   ════ GANGWAY ══════════
-   ├─ Segment B: 2 rows ─┤
-   ════ GANGWAY ══════════
-   ├─ Segment C: 2 rows ─┤
-   ════ GANGWAY ══════════
-   └─ Segment D: 3 rows ─┘  ← near entrance
-*/
-const INTL_LAYOUT = {
-    isIntl: true,
-    halls: [
-        {
-            id: "Hall 5",  start: 5001, end: 5078,
-            cols: 9,  // narrower hall (≈9 cols × 9 rows = 81, uses 78)
-            segments: [
-                { rows: 2, gangwayAfter: true },
-                { rows: 2, gangwayAfter: true },
-                { rows: 2, gangwayAfter: true },
-                { rows: 3, gangwayAfter: false },
-            ]
-        },
-        {
-            id: "Hall 6",  start: 6001, end: 6189,
-            cols: 21,  // 21 × 9 = 189 exactly
-            segments: [
-                { rows: 2, gangwayAfter: true },
-                { rows: 2, gangwayAfter: true },
-                { rows: 2, gangwayAfter: true },
-                { rows: 3, gangwayAfter: false },
-            ]
-        },
-        {
-            id: "Hall 7",  start: 7001, end: 7196,
-            cols: 21,  // 21 × 9 = 189, +7 overflow row
-            segments: [
-                { rows: 2, gangwayAfter: true },
-                { rows: 2, gangwayAfter: true },
-                { rows: 2, gangwayAfter: true },
-                { rows: 3, gangwayAfter: false },
-            ]
-        },
-        {
-            id: "Hall 8",  start: 8001, end: 8181,
-            cols: 20,  // 20 × 9 = 180 + partial
-            segments: [
-                { rows: 2, gangwayAfter: true },
-                { rows: 2, gangwayAfter: true },
-                { rows: 2, gangwayAfter: true },
-                { rows: 3, gangwayAfter: false },
-            ]
-        },
-        {
-            id: "Hall 9",  start: 9001, end: 9191,
-            cols: 21,  // 21 × 9 = 189 + 2 extra
-            segments: [
-                { rows: 2, gangwayAfter: true },
-                { rows: 2, gangwayAfter: true },
-                { rows: 2, gangwayAfter: true },
-                { rows: 3, gangwayAfter: false },
-            ]
-        },
-        {
-            id: "Hall 10", start: 1001, end: 1182,
-            cols: 20,  // 20 × 9 = 180 + 2 extra
-            segments: [
-                { rows: 2, gangwayAfter: true },
-                { rows: 2, gangwayAfter: true },
-                { rows: 2, gangwayAfter: true },
-                { rows: 3, gangwayAfter: false },
-            ]
-        }
-    ]
+   HALL 6 BOOTH NUMBERING PATTERN (read directly from image):
+   ─────────────────────────────────────────────────────────────
+   Row 0 (top strip, no groups):  6001 6002 6003 6004 6005 6006 6007 6008
+
+   Then repeating BLOCKS of 2 rows × 3 clusters of 5 booths:
+   Each cluster = 5 booths wide. Between clusters = vertical gangway gap.
+   Between blocks = horizontal gangway.
+
+   NUMBERING inside each cluster-pair:
+     Top row:    [5] [4] [3] [2] [1]   ← RIGHT to LEFT
+     Bottom row: [6] [7] [8] [9] [10]  ← LEFT to RIGHT
+   Numbers are globally sequential, snaking through clusters L→M→R.
+
+   Block 1 example (from image):
+     L-top:  6023 6022 6021 6020 6019
+     L-bot:  6024 6025 6026 6027 6028
+     M-top:  6018 6017 6016 6015 6014
+     M-bot:  6029 6030 6031 6032 6033
+     R-top:  6013 6012 6011 6010 6009
+     R-bot:  6034 6035 6036 6037 6038
+
+   HALL CONFIGS (clusters per row, rows of cluster-blocks):
+   • Hall 5:  starts at 5001, single row top strip then 3-cluster blocks
+   • Hall 6:  starts at 6001, 8 booths top strip + blocks of 3×5×2
+   • Hall 7–10: same pattern, different start numbers
+   ════════════════════════════════════════════════════════════════ */
+
+/* Per-hall config: how many booths in the top strip, clusters per block-row, number of block-rows */
+const INTL_HALL_CONFIGS = {
+    // blockRows = ceil((total - topStrip) / (clusters×clusterSize×2))
+    "Hall 5":  { start: 5001, end: 5078, topStrip: 0,  clusters: 3, clusterSize: 5, blockRows: 3 },
+    "Hall 6":  { start: 6001, end: 6189, topStrip: 8,  clusters: 3, clusterSize: 5, blockRows: 7 },
+    "Hall 7":  { start: 7001, end: 7196, topStrip: 0,  clusters: 3, clusterSize: 5, blockRows: 7 },
+    "Hall 8":  { start: 8001, end: 8181, topStrip: 0,  clusters: 3, clusterSize: 5, blockRows: 7 },
+    "Hall 9":  { start: 9001, end: 9191, topStrip: 0,  clusters: 3, clusterSize: 5, blockRows: 7 },
+    "Hall 10": { start: 1001, end: 1182, topStrip: 0,  clusters: 3, clusterSize: 5, blockRows: 7 },
 };
 
 /* ── RENDER FLOOR ── */
@@ -402,11 +360,9 @@ function renderFloor() {
     floor.innerHTML = "";
     floor.classList.remove("centered");
 
-    // Check if this is the intl event with spatial layout
     if (eventId === "intl") {
         renderIntlFloor();
     } else {
-        // Default layout for other events
         const hallCount = ev.halls.length;
         floor.classList.toggle("centered", hallCount <= 3);
         ev.halls.forEach(hall => {
@@ -423,30 +379,39 @@ function renderFloor() {
     }
 }
 
+/* ── HELPER: make a booth cell ── */
+function makeBoothCell(id) {
+    if (!id) {
+        const e = document.createElement("div");
+        e.className = "intl-empty-cell";
+        return e;
+    }
+    return createBooth(id);
+}
+
 /* ── RENDER INTL SPATIAL FLOOR ── */
 function renderIntlFloor() {
-    // Build booth-id → data lookup that mirrors hall ranges
-    // We'll assign booths in order to the spatial grid positions
-
-    // Outer wrapper: one horizontal strip for the entire building
     const building = document.createElement("div");
     building.className = "intl-building";
 
-    // Top label bar: loading dock
+    // Top loading dock bar
     const topBar = document.createElement("div");
     topBar.className = "intl-top-bar";
-    topBar.textContent = "▲ LOADING DOCK";
+    topBar.innerHTML = `<span>▲ LOADING DOCK &nbsp;/&nbsp; LOUNGE AREA (Hall 5 end)</span>`;
     building.appendChild(topBar);
 
-    // Hall strip (all halls side by side)
+    // All halls side by side
     const hallStrip = document.createElement("div");
     hallStrip.className = "intl-hall-strip";
 
-    INTL_LAYOUT.halls.forEach((hallCfg, hIdx) => {
-        // Get actual booth IDs for this hall from allData
-        const hallDef = ev.halls.find(h => h.name === hallCfg.id);
-        let boothIds = hallDef ? getHallBoothIds(hallDef) : [];
-        // Sort numerically
+    ev.halls.forEach((hallDef, hIdx) => {
+        if (hallDef.name === "Ambulance") return; // skip ambulance from spatial view
+
+        const cfg = INTL_HALL_CONFIGS[hallDef.name];
+        if (!cfg) return;
+
+        // Get sorted booth IDs for this hall
+        let boothIds = getHallBoothIds(hallDef);
         boothIds.sort((a, b) => parseInt(a) - parseInt(b));
 
         const hallEl = document.createElement("div");
@@ -455,75 +420,132 @@ function renderIntlFloor() {
         // Hall label
         const label = document.createElement("div");
         label.className = "intl-hall-label";
-        label.textContent = hallCfg.id;
+        label.textContent = hallDef.name;
         hallEl.appendChild(label);
 
-        // Booth content area
         const content = document.createElement("div");
         content.className = "intl-hall-content";
 
-        let boothIdx = 0;
-        const cols = hallCfg.cols;
+        let idx = 0;
+        const { topStrip, clusters, clusterSize, blockRows } = cfg;
+        const totalClusterWidth = clusters * clusterSize; // e.g. 15 for 3×5
 
-        hallCfg.segments.forEach((seg, sIdx) => {
-            // Booth rows for this segment
-            const segEl = document.createElement("div");
-            segEl.className = "intl-segment";
+        // ── TOP STRIP (single row, no grouping) ──────────────────
+        if (topStrip > 0) {
+            const stripRow = document.createElement("div");
+            stripRow.className = "intl-booth-row intl-top-strip";
+            for (let i = 0; i < topStrip && idx < boothIds.length; i++) {
+                stripRow.appendChild(makeBoothCell(boothIds[idx++]));
+            }
+            content.appendChild(stripRow);
 
-            for (let r = 0; r < seg.rows; r++) {
-                const rowEl = document.createElement("div");
-                rowEl.className = "intl-booth-row";
-                for (let c = 0; c < cols; c++) {
-                    if (boothIdx < boothIds.length) {
-                        const id = boothIds[boothIdx++];
-                        rowEl.appendChild(createBooth(id));
-                    } else {
-                        // Empty cell placeholder to maintain grid alignment
-                        const empty = document.createElement("div");
-                        empty.className = "intl-empty-cell";
-                        rowEl.appendChild(empty);
-                    }
+            // gangway after strip
+            content.appendChild(makeGangway());
+        }
+
+        // ── BLOCK ROWS: each block = 2 rows × (clusters of clusterSize) ──
+        /*
+         * Numbering pattern inside each block (from the image):
+         *
+         * The IDs are assigned sequentially BEFORE layout.
+         * But visually they display as:
+         *   Top row of cluster L: IDs going RIGHT→LEFT (highest first in that cluster)
+         *   Bottom row of cluster L: IDs going LEFT→RIGHT (lower values continuing)
+         *
+         * In practice: we just take the next `clusterSize*2` IDs for each cluster,
+         * split them: first half → top row (reversed), second half → bottom row (forward).
+         * Then we render L cluster, gap, M cluster, gap, R cluster.
+         */
+        for (let block = 0; block < blockRows && idx < boothIds.length; block++) {
+            const blockEl = document.createElement("div");
+            blockEl.className = "intl-block";
+
+            // Build top row and bottom row across all clusters
+            const topRowEl = document.createElement("div");
+            topRowEl.className = "intl-booth-row";
+            const botRowEl = document.createElement("div");
+            botRowEl.className = "intl-booth-row";
+
+            for (let cl = 0; cl < clusters; cl++) {
+                // Grab clusterSize*2 IDs for this cluster pair
+                const clusterIds = [];
+                for (let i = 0; i < clusterSize * 2 && idx < boothIds.length; i++) {
+                    clusterIds.push(boothIds[idx++]);
                 }
-                segEl.appendChild(rowEl);
-            }
-            content.appendChild(segEl);
+                // Top half (first clusterSize): display RIGHT→LEFT
+                const topIds = clusterIds.slice(0, clusterSize).reverse();
+                // Bottom half (second clusterSize): display LEFT→RIGHT
+                const botIds = clusterIds.slice(clusterSize);
 
-            // Gangway between segments
-            if (seg.gangwayAfter && sIdx < hallCfg.segments.length - 1) {
-                const gangway = document.createElement("div");
-                gangway.className = "intl-gangway";
-                gangway.innerHTML = `<span class="intl-gangway-label">◄ GANGWAY ►</span>`;
-                content.appendChild(gangway);
+                // Fill top row for this cluster
+                for (let i = 0; i < clusterSize; i++) {
+                    topRowEl.appendChild(topIds[i] != null ? makeBoothCell(topIds[i]) : makeBoothCell(null));
+                }
+                // Fill bottom row for this cluster
+                for (let i = 0; i < clusterSize; i++) {
+                    botRowEl.appendChild(botIds[i] != null ? makeBoothCell(botIds[i]) : makeBoothCell(null));
+                }
+
+                // Vertical gangway gap between clusters (not after last)
+                if (cl < clusters - 1) {
+                    const vgapTop = document.createElement("div");
+                    vgapTop.className = "intl-vgangway";
+                    topRowEl.appendChild(vgapTop);
+
+                    const vgapBot = document.createElement("div");
+                    vgapBot.className = "intl-vgangway";
+                    botRowEl.appendChild(vgapBot);
+                }
             }
-        });
+
+            blockEl.appendChild(topRowEl);
+            blockEl.appendChild(botRowEl);
+            content.appendChild(blockEl);
+
+            // Horizontal gangway between blocks (not after last)
+            if (block < blockRows - 1 && idx < boothIds.length) {
+                content.appendChild(makeGangway());
+            }
+        }
 
         hallEl.appendChild(content);
 
-        // Hall entrance at bottom
+        // Entrance bar at bottom
         const entrance = document.createElement("div");
         entrance.className = "intl-entrance";
-        entrance.innerHTML = `<span>▼ ENTRANCE</span>`;
+        entrance.innerHTML = `<span>▼ ENTRANCE · ${hallDef.name}</span>`;
         hallEl.appendChild(entrance);
 
         hallStrip.appendChild(hallEl);
 
-        // Vertical divider between halls (except last)
-        if (hIdx < INTL_LAYOUT.halls.length - 1) {
-            const divider = document.createElement("div");
-            divider.className = "intl-hall-divider";
-            hallStrip.appendChild(divider);
+        // Vertical wall divider between halls
+        if (hIdx < ev.halls.length - 2) { // -2 because we skip Ambulance
+            hallStrip.appendChild(makeHallDivider());
         }
     });
 
     building.appendChild(hallStrip);
 
-    // Bottom pre-function area
-    const bottomBar = document.createElement("div");
-    bottomBar.className = "intl-bottom-bar";
-    bottomBar.textContent = "PRE FUNCTION — ENTRANCE GATES";
-    building.appendChild(bottomBar);
+    // Bottom pre-function bar
+    const botBar = document.createElement("div");
+    botBar.className = "intl-bottom-bar";
+    botBar.textContent = "PRE FUNCTION — ENTRANCE GATES  (Hall 5 · Hall 6 · Hall 7 · Hall 8 · Hall 9 · Hall 10)";
+    building.appendChild(botBar);
 
     floor.appendChild(building);
+}
+
+function makeGangway() {
+    const g = document.createElement("div");
+    g.className = "intl-gangway";
+    g.innerHTML = `<span class="intl-gangway-label">◄── GANGWAY ──►</span>`;
+    return g;
+}
+
+function makeHallDivider() {
+    const d = document.createElement("div");
+    d.className = "intl-hall-divider";
+    return d;
 }
 
 /* ── CREATE BOOTH ── */
