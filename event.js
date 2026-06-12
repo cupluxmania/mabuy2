@@ -60,17 +60,17 @@ const EVENTS = {
         name: "Int'l HOSPEX",
         location: "BSD City, Banten",
         venue: "ICE BSD",
-        dates: "Oct 7–10, 2026",
+        dates: "Dec 3–6, 2026",
         status: "active",
         stripeColor: "#ef4444",
         scriptUrl: "https://script.google.com/macros/s/AKfycbzeXfwbFMaC8WH3th-aw5_PtMGTlz6UHMC5S5tWs9j1FW-G_Fszldy9QqiY5Zps-mFGQg/exec",
         halls: [
-            { name: "Hall 5",  start: 5001, end: 5078, columns: 6 },
-            { name: "Hall 6",  start: 6001, end: 6189, columns: 8 },
-            { name: "Hall 7",  start: 7001, end: 7196, columns: 8 },
-            { name: "Hall 8",  start: 8001, end: 8181, columns: 8 },
-            { name: "Hall 9",  start: 9001, end: 9191, columns: 8 },
-            { name: "Hall 10", start: 1001, end: 1182, columns: 8 },
+            { name: "Hall 5",  start: 5001, end: 5078 },
+            { name: "Hall 6",  start: 6001, end: 6189 },
+            { name: "Hall 7",  start: 7001, end: 7196 },
+            { name: "Hall 8",  start: 8001, end: 8181 },
+            { name: "Hall 9",  start: 9001, end: 9191 },
+            { name: "Hall 10", start: 1001, end: 1182 },
             { name: "Ambulance", start: "A", end: "J"  }
         ]
     }
@@ -311,68 +311,229 @@ function getHallBoothIds(hall) {
     return ids;
 }
 
+/* ── INTL FLOORPLAN LAYOUT CONFIG ──
+   Mirrors the real Hospex 2026 floorplan (ICE BSD, Halls 5–10).
+
+   Based on real analysis of the floorplan PDF:
+   • Hall 6 = 21 cols × 9 rows → 189 booths ✓
+   • Hall 7 = 20 cols × 9 rows → 180 + 16 extras → 20 cols + partial row
+   • Hall 8 = 20 cols × 9 rows → 181 booths ≈ ✓
+   • Hall 9 = 20 cols × 9 rows → 191 booths ≈ ✓
+   • Hall 10 = 20 cols × 9 rows → 182 booths ≈ ✓
+   • Hall 5 = smaller/narrower, 9 cols × 9 rows → 81 ≈ 78 booths
+
+   Real gangway pattern (9 rows total):
+   ┌─ Segment A: 2 rows ─┐
+   ════ GANGWAY ══════════
+   ├─ Segment B: 2 rows ─┤
+   ════ GANGWAY ══════════
+   ├─ Segment C: 2 rows ─┤
+   ════ GANGWAY ══════════
+   └─ Segment D: 3 rows ─┘  ← near entrance
+*/
+const INTL_LAYOUT = {
+    isIntl: true,
+    halls: [
+        {
+            id: "Hall 5",  start: 5001, end: 5078,
+            cols: 9,  // narrower hall (≈9 cols × 9 rows = 81, uses 78)
+            segments: [
+                { rows: 2, gangwayAfter: true },
+                { rows: 2, gangwayAfter: true },
+                { rows: 2, gangwayAfter: true },
+                { rows: 3, gangwayAfter: false },
+            ]
+        },
+        {
+            id: "Hall 6",  start: 6001, end: 6189,
+            cols: 21,  // 21 × 9 = 189 exactly
+            segments: [
+                { rows: 2, gangwayAfter: true },
+                { rows: 2, gangwayAfter: true },
+                { rows: 2, gangwayAfter: true },
+                { rows: 3, gangwayAfter: false },
+            ]
+        },
+        {
+            id: "Hall 7",  start: 7001, end: 7196,
+            cols: 21,  // 21 × 9 = 189, +7 overflow row
+            segments: [
+                { rows: 2, gangwayAfter: true },
+                { rows: 2, gangwayAfter: true },
+                { rows: 2, gangwayAfter: true },
+                { rows: 3, gangwayAfter: false },
+            ]
+        },
+        {
+            id: "Hall 8",  start: 8001, end: 8181,
+            cols: 20,  // 20 × 9 = 180 + partial
+            segments: [
+                { rows: 2, gangwayAfter: true },
+                { rows: 2, gangwayAfter: true },
+                { rows: 2, gangwayAfter: true },
+                { rows: 3, gangwayAfter: false },
+            ]
+        },
+        {
+            id: "Hall 9",  start: 9001, end: 9191,
+            cols: 21,  // 21 × 9 = 189 + 2 extra
+            segments: [
+                { rows: 2, gangwayAfter: true },
+                { rows: 2, gangwayAfter: true },
+                { rows: 2, gangwayAfter: true },
+                { rows: 3, gangwayAfter: false },
+            ]
+        },
+        {
+            id: "Hall 10", start: 1001, end: 1182,
+            cols: 20,  // 20 × 9 = 180 + 2 extra
+            segments: [
+                { rows: 2, gangwayAfter: true },
+                { rows: 2, gangwayAfter: true },
+                { rows: 2, gangwayAfter: true },
+                { rows: 3, gangwayAfter: false },
+            ]
+        }
+    ]
+};
+
 /* ── RENDER FLOOR ── */
 function renderFloor() {
     floor.innerHTML = "";
-    const hallCount = ev.halls.length;
-    floor.classList.toggle("centered", hallCount <= 3);
-    ev.halls.forEach(hall => {
-        const hallDiv = document.createElement("div");
-        hallDiv.className = "hall";
-        const cols = hall.columns || 8;
-        hallDiv.innerHTML = `
-            <div class="grid" style="grid-template-columns:repeat(${cols},70px)"></div>
-            <div class="hall-header"><h3>${hall.name}</h3></div>
-        `;
-        const grid = hallDiv.querySelector(".grid");
-        getHallBoothIds(hall).forEach(id => grid.appendChild(createBooth(id)));
-        floor.appendChild(hallDiv);
-    });
+    floor.classList.remove("centered");
+
+    // Check if this is the intl event with spatial layout
+    if (eventId === "intl") {
+        renderIntlFloor();
+    } else {
+        // Default layout for other events
+        const hallCount = ev.halls.length;
+        floor.classList.toggle("centered", hallCount <= 3);
+        ev.halls.forEach(hall => {
+            const hallDiv = document.createElement("div");
+            hallDiv.className = "hall";
+            hallDiv.innerHTML = `
+                <div class="hall-header"><h3>${hall.name}</h3></div>
+                <div class="grid"></div>
+            `;
+            const grid = hallDiv.querySelector(".grid");
+            getHallBoothIds(hall).forEach(id => grid.appendChild(createBooth(id)));
+            floor.appendChild(hallDiv);
+        });
+    }
 }
 
-/* ── COUNTRY COLOR MAP (matches PDF legend) ── */
-const COUNTRY_COLORS = {
-    "china partner 1":  { bg: "#fef08a", border: "#ca8a04", text: "#713f12" },
-    "china (partner 1)": { bg: "#fef08a", border: "#ca8a04", text: "#713f12" },
-    "china partner 2":  { bg: "#fed7aa", border: "#ea580c", text: "#7c2d12" },
-    "china (partner 2)": { bg: "#fed7aa", border: "#ea580c", text: "#7c2d12" },
-    "china":     { bg: "#fef08a", border: "#ca8a04", text: "#713f12" },
-    "canada":    { bg: "#a5f3fc", border: "#0891b2", text: "#164e63" },
-    "india":     { bg: "#67e8f9", border: "#0e7490", text: "#164e63" },
-    "indonesia": { bg: "#bfdbfe", border: "#3b82f6", text: "#1e3a8a" },
-    "korea":     { bg: "#e5e7eb", border: "#6b7280", text: "#374151" },
-    "south korea": { bg: "#e5e7eb", border: "#6b7280", text: "#374151" },
-    "malaysia":  { bg: "#d9f99d", border: "#65a30d", text: "#3f6212" },
-    "taiwan":    { bg: "#fbcfe8", border: "#db2777", text: "#831843" },
-    "thailand":  { bg: "#d6d3d1", border: "#78716c", text: "#44403c" },
-    "singapore": { bg: "#ddd6fe", border: "#7c3aed", text: "#4c1d95" },
-    "japan":     { bg: "#fce7f3", border: "#be185d", text: "#831843" },
-    "usa":       { bg: "#fee2e2", border: "#dc2626", text: "#7f1d1d" },
-    "united states": { bg: "#fee2e2", border: "#dc2626", text: "#7f1d1d" },
-    "germany":   { bg: "#fef9c3", border: "#a16207", text: "#713f12" },
-    "netherlands":{ bg: "#ffedd5", border: "#c2410c", text: "#7c2d12" },
-    "uk":        { bg: "#ede9fe", border: "#6d28d9", text: "#4c1d95" },
-    "united kingdom": { bg: "#ede9fe", border: "#6d28d9", text: "#4c1d95" },
-};
-function getCountryColor(country) {
-    if (!country) return null;
-    return COUNTRY_COLORS[country.toLowerCase().trim()] || null;
+/* ── RENDER INTL SPATIAL FLOOR ── */
+function renderIntlFloor() {
+    // Build booth-id → data lookup that mirrors hall ranges
+    // We'll assign booths in order to the spatial grid positions
+
+    // Outer wrapper: one horizontal strip for the entire building
+    const building = document.createElement("div");
+    building.className = "intl-building";
+
+    // Top label bar: loading dock
+    const topBar = document.createElement("div");
+    topBar.className = "intl-top-bar";
+    topBar.textContent = "▲ LOADING DOCK";
+    building.appendChild(topBar);
+
+    // Hall strip (all halls side by side)
+    const hallStrip = document.createElement("div");
+    hallStrip.className = "intl-hall-strip";
+
+    INTL_LAYOUT.halls.forEach((hallCfg, hIdx) => {
+        // Get actual booth IDs for this hall from allData
+        const hallDef = ev.halls.find(h => h.name === hallCfg.id);
+        let boothIds = hallDef ? getHallBoothIds(hallDef) : [];
+        // Sort numerically
+        boothIds.sort((a, b) => parseInt(a) - parseInt(b));
+
+        const hallEl = document.createElement("div");
+        hallEl.className = "intl-hall";
+
+        // Hall label
+        const label = document.createElement("div");
+        label.className = "intl-hall-label";
+        label.textContent = hallCfg.id;
+        hallEl.appendChild(label);
+
+        // Booth content area
+        const content = document.createElement("div");
+        content.className = "intl-hall-content";
+
+        let boothIdx = 0;
+        const cols = hallCfg.cols;
+
+        hallCfg.segments.forEach((seg, sIdx) => {
+            // Booth rows for this segment
+            const segEl = document.createElement("div");
+            segEl.className = "intl-segment";
+
+            for (let r = 0; r < seg.rows; r++) {
+                const rowEl = document.createElement("div");
+                rowEl.className = "intl-booth-row";
+                for (let c = 0; c < cols; c++) {
+                    if (boothIdx < boothIds.length) {
+                        const id = boothIds[boothIdx++];
+                        rowEl.appendChild(createBooth(id));
+                    } else {
+                        // Empty cell placeholder to maintain grid alignment
+                        const empty = document.createElement("div");
+                        empty.className = "intl-empty-cell";
+                        rowEl.appendChild(empty);
+                    }
+                }
+                segEl.appendChild(rowEl);
+            }
+            content.appendChild(segEl);
+
+            // Gangway between segments
+            if (seg.gangwayAfter && sIdx < hallCfg.segments.length - 1) {
+                const gangway = document.createElement("div");
+                gangway.className = "intl-gangway";
+                gangway.innerHTML = `<span class="intl-gangway-label">◄ GANGWAY ►</span>`;
+                content.appendChild(gangway);
+            }
+        });
+
+        hallEl.appendChild(content);
+
+        // Hall entrance at bottom
+        const entrance = document.createElement("div");
+        entrance.className = "intl-entrance";
+        entrance.innerHTML = `<span>▼ ENTRANCE</span>`;
+        hallEl.appendChild(entrance);
+
+        hallStrip.appendChild(hallEl);
+
+        // Vertical divider between halls (except last)
+        if (hIdx < INTL_LAYOUT.halls.length - 1) {
+            const divider = document.createElement("div");
+            divider.className = "intl-hall-divider";
+            hallStrip.appendChild(divider);
+        }
+    });
+
+    building.appendChild(hallStrip);
+
+    // Bottom pre-function area
+    const bottomBar = document.createElement("div");
+    bottomBar.className = "intl-bottom-bar";
+    bottomBar.textContent = "PRE FUNCTION — ENTRANCE GATES";
+    building.appendChild(bottomBar);
+
+    floor.appendChild(building);
 }
 
 /* ── CREATE BOOTH ── */
 function createBooth(id) {
     const data  = allData[id];
     const booth = document.createElement("div");
-    const status = data?.status || "available";
-    booth.className  = "booth " + status;
+    booth.className  = "booth " + (data?.status || "available");
     booth.innerText  = id;
     booth.dataset.id = id.toLowerCase();
     if (data?.category) booth.dataset.category = data.category;
-    // Country color: only on available booths — sold/booked use their status color
-    if (data?.country && status === "available") {
-        const cc = getCountryColor(data.country);
-        if (cc) { booth.style.background = cc.bg; booth.style.borderColor = cc.border; booth.style.color = cc.text; }
-    }
     booth.onclick = (e) => {
         e.stopPropagation();
         highlightBooth(booth);
