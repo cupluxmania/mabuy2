@@ -60,7 +60,7 @@ const EVENTS = {
         name: "Int'l HOSPEX",
         location: "BSD City, Banten",
         venue: "ICE BSD",
-        dates: "Dec 3–6, 2026",
+        dates: "07–10 Oct 2026",
         status: "active",
         stripeColor: "#ef4444",
         scriptUrl: "https://script.google.com/macros/s/AKfycbzeXfwbFMaC8WH3th-aw5_PtMGTlz6UHMC5S5tWs9j1FW-G_Fszldy9QqiY5Zps-mFGQg/exec",
@@ -459,11 +459,17 @@ function renderIntlFloor() {
     const building = document.createElement("div");
     building.className = "intl-building";
 
+    /* ── TOP BAR: LOADING DOCK ── */
     const topBar = document.createElement("div");
     topBar.className = "intl-top-bar";
-    topBar.innerHTML = `<span>▲ LOADING DOCK &nbsp;/&nbsp; LOUNGE AREA</span>`;
+    topBar.innerHTML = `<span>▲&nbsp; LOADING DOCK &nbsp;·&nbsp; LOUNGE AREA &nbsp;·&nbsp; DROP OFF</span>`;
     building.appendChild(topBar);
 
+    /* ── MAIN CONTENT ROW: hall strip + food court ── */
+    const mainRow = document.createElement("div");
+    mainRow.className = "intl-main-row";
+
+    /* ── HALL STRIP ── */
     const hallStrip = document.createElement("div");
     hallStrip.className = "intl-hall-strip";
 
@@ -472,6 +478,14 @@ function renderIntlFloor() {
     hallDefs.forEach((hallDef, hIdx) => {
         const hallEl = document.createElement("div");
         hallEl.className = "intl-hall";
+
+        /* Lounge strip above booths for Hall 6 and 7 (matches PDF) */
+        if (hallDef.name === "Hall 6" || hallDef.name === "Hall 7") {
+            const lounge = document.createElement("div");
+            lounge.className = "intl-lounge-strip";
+            lounge.textContent = "LOUNGE AREA";
+            hallEl.appendChild(lounge);
+        }
 
         const label = document.createElement("div");
         label.className = "intl-hall-label";
@@ -509,11 +523,31 @@ function renderIntlFloor() {
         }
     });
 
-    building.appendChild(hallStrip);
+    mainRow.appendChild(hallStrip);
 
+    /* ── FOOD COURT PANEL (right side, matching PDF) ── */
+    const foodCourt = document.createElement("div");
+    foodCourt.className = "intl-food-court";
+    foodCourt.innerHTML = `
+        <div class="intl-food-court-title">FOOD COURT AREA</div>
+        <div class="intl-food-court-body">
+            <div class="intl-food-court-label">20m × 103m</div>
+            <div class="intl-food-court-sqm">= 2,060 sqm</div>
+            <div class="intl-food-court-sub">Loading Access</div>
+            <div class="intl-food-court-inout">
+                <span class="intl-inout-badge">IN/OUT</span>
+                <span class="intl-inout-badge">IN/OUT</span>
+            </div>
+        </div>
+    `;
+    mainRow.appendChild(foodCourt);
+
+    building.appendChild(mainRow);
+
+    /* ── BOTTOM BAR: PRE FUNCTION / ENTRANCE ── */
     const botBar = document.createElement("div");
     botBar.className = "intl-bottom-bar";
-    botBar.textContent = "PRE FUNCTION — ENTRANCE GATES  (Hall 5 · Hall 6 · Hall 7 · Hall 8 · Hall 9 · Hall 10)";
+    botBar.innerHTML = `<span>▼&nbsp; PRE FUNCTION &nbsp;—&nbsp; ENTRANCE GATES &nbsp;·&nbsp; Hall 5 &nbsp;·&nbsp; Hall 6 &nbsp;·&nbsp; Hall 7 &nbsp;·&nbsp; Hall 8 &nbsp;·&nbsp; Hall 9 &nbsp;·&nbsp; Hall 10</span>`;
     building.appendChild(botBar);
 
     floor.appendChild(building);
