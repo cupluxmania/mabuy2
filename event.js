@@ -216,7 +216,6 @@ async function loadDatabase() {
 
 /* ── PROCESS DATA ── */
 function processData(raw) {
-    // Debug: log first row's keys so we can verify field names from GAS
     if (raw && raw.length > 0) {
         console.log("[mabuy debug] raw row keys:", Object.keys(raw[0]));
         console.log("[mabuy debug] first row sample:", raw[0]);
@@ -224,11 +223,7 @@ function processData(raw) {
     const map = {};
     raw.forEach(row => {
         if(!row.boothid) return;
-        // Country: GAS lowercases header "COUNTRY" → "country"
         const country = (row.country || row.COUNTRY || "").toString().trim();
-
-        // G/W: header "G/W" — GAS may key it as "g/w", "gw", "g_w", or strip to just the value
-        // Also check "NARIK G/W" column (short: G or W)
         const gwRaw = (
             row["g/w"] || row["G/W"] || row.gw || row.GW ||
             row["narik g/w"] || row["narik_g/w"] || row["narik gw"] || row.narikgw || ""
@@ -237,7 +232,6 @@ function processData(raw) {
         const countryLower = country.toLowerCase().trim();
         const isIndonesia = countryLower.includes("indonesia");
 
-        // G/W and country are INDEPENDENT — a booth can be Green AND Local at the same time
         let gwCategory = "";
         if      (/^green$/i.test(gwRaw)     || gwRaw === "g") gwCategory = "green";
         else if (/^white$/i.test(gwRaw)     || gwRaw === "w") gwCategory = "white";
@@ -247,7 +241,6 @@ function processData(raw) {
         if      (isIndonesia)  origin = "local";
         else if (countryLower) origin = "overseas";
 
-        // tags: all categories this booth belongs to
         const tags = [];
         if (gwCategory) tags.push(gwCategory);
         if (origin)     tags.push(origin);
@@ -311,50 +304,6 @@ function getHallBoothIds(hall) {
     return ids;
 }
 
-/* ════════════════════════════════════════════════════════════════
-   INT'L FLOORPLAN — EXACT LAYOUT ENGINE
-   ════════════════════════════════════════════════════════════════
-
-   Reconstructed from the real ICE BSD Hospex 2026 floorplan image.
-
-   HALL 6 BOOTH NUMBERING PATTERN (read directly from image):
-   ─────────────────────────────────────────────────────────────
-   Row 0 (top strip, no groups):  6001 6002 6003 6004 6005 6006 6007 6008
-
-   Then repeating BLOCKS of 2 rows × 3 clusters of 5 booths:
-   Each cluster = 5 booths wide. Between clusters = vertical gangway gap.
-   Between blocks = horizontal gangway.
-
-   NUMBERING inside each cluster-pair:
-     Top row:    [5] [4] [3] [2] [1]   ← RIGHT to LEFT
-     Bottom row: [6] [7] [8] [9] [10]  ← LEFT to RIGHT
-   Numbers are globally sequential, snaking through clusters L→M→R.
-
-   Block 1 example (from image):
-     L-top:  6023 6022 6021 6020 6019
-     L-bot:  6024 6025 6026 6027 6028
-     M-top:  6018 6017 6016 6015 6014
-     M-bot:  6029 6030 6031 6032 6033
-     R-top:  6013 6012 6011 6010 6009
-     R-bot:  6034 6035 6036 6037 6038
-
-   HALL CONFIGS (clusters per row, rows of cluster-blocks):
-   • Hall 5:  starts at 5001, single row top strip then 3-cluster blocks
-   • Hall 6:  starts at 6001, 8 booths top strip + blocks of 3×5×2
-   • Hall 7–10: same pattern, different start numbers
-   ════════════════════════════════════════════════════════════════ */
-
-/* Per-hall config: how many booths in the top strip, clusters per block-row, number of block-rows */
-const INTL_HALL_CONFIGS = {
-    // blockRows = ceil((total - topStrip) / (clusters×clusterSize×2))
-    "Hall 5":  { start: 5001, end: 5078, topStrip: 0,  clusters: 3, clusterSize: 5, blockRows: 3 },
-    "Hall 6":  { start: 6001, end: 6189, topStrip: 8,  clusters: 3, clusterSize: 5, blockRows: 7 },
-    "Hall 7":  { start: 7001, end: 7196, topStrip: 0,  clusters: 3, clusterSize: 5, blockRows: 7 },
-    "Hall 8":  { start: 8001, end: 8181, topStrip: 0,  clusters: 3, clusterSize: 5, blockRows: 7 },
-    "Hall 9":  { start: 9001, end: 9191, topStrip: 0,  clusters: 3, clusterSize: 5, blockRows: 7 },
-    "Hall 10": { start: 1001, end: 1182, topStrip: 0,  clusters: 3, clusterSize: 5, blockRows: 7 },
-};
-
 /* ── RENDER FLOOR ── */
 function renderFloor() {
     floor.innerHTML = "";
@@ -389,35 +338,141 @@ function makeBoothCell(id) {
     return createBooth(id);
 }
 
+function makeGangway(label) {
+    const g = document.createElement("div");
+    g.className = "intl-gangway";
+    g.innerHTML = `<span class="intl-gangway-label">${label || "◄── GANGWAY ──►"}</span>`;
+    return g;
+}
+
+function makeHallDivider() {
+    const d = document.createElement("div");
+    d.className = "intl-hall-divider";
+    return d;
+}
+
+function makeVGap() {
+    const v = document.createElement("div");
+    v.className = "intl-vgangway";
+    return v;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   INT'L FLOORPLAN — EXACT LAYOUT ENGINE v3
+   Based on real ICE BSD Hospex 2026 floorplan images.
+
+   NUMBERING PATTERN (same for all halls, verified from images):
+   ─────────────────────────────────────────────────────────────
+   Within each horizontal block (2 rows × N clusters):
+
+   Booths are numbered sequentially. For each BLOCK the booth IDs 
+   are distributed to 3 clusters (Left, Middle, Right):
+
+   Reading order from image:
+     Top row:    RIGHT cluster (R→L)  |gap| MIDDLE cluster (R→L) |gap| LEFT cluster (R→L)
+     Bottom row: LEFT cluster (L→R)   |gap| MIDDLE cluster (L→R) |gap| RIGHT cluster (L→R)
+
+   So if IDs for this block are [n, n+1, ..., n+29] (for 3 clusters × 5 × 2):
+     Top-R: n+4, n+3, n+2, n+1, n+0  → displayed as: n+4 n+3 n+2 n+1 n+0
+     Top-M: n+9, n+8, n+7, n+6, n+5
+     Top-L: n+14, n+13, n+12, n+11, n+10
+     Bot-L: n+15, n+16, n+17, n+18, n+19
+     Bot-M: n+20, n+21, n+22, n+23, n+24
+     Bot-R: n+25, n+26, n+27, n+28, n+29
+
+   This is the snake: R→M→L across top, then L→M→R across bottom.
+
+   HALL-SPECIFIC CONFIGS:
+   ─────────────────────────────────────────────────────────────
+   Hall 5:  no top strip, 2 clusters of 6 per block, 4 block rows (special last block)
+   Hall 6:  top strip 8 booths, 3 clusters of 5 per block, 7 block rows
+   Hall 7-10: no top strip, 3 clusters of 5 per block, ~7 block rows
+   Hall 10: no top strip, 3 clusters of 5 per block, ~7 block rows
+
+   HALL 5 SPECIAL:
+   - Cluster size = 6 (not 5)
+   - Only 2 clusters per row (not 3)
+   - Last block has special merged booth "5035-A" on the left
+════════════════════════════════════════════════════════════════ */
+
+/* Build a single block row element given an array of booth IDs,
+   number of clusters, and cluster size.
+   Numbering: snake R→M→L across top, L→M→R across bottom.
+*/
+function buildBlock(boothIdsInBlock, clusters, clusterSize) {
+    const blockEl = document.createElement("div");
+    blockEl.className = "intl-block";
+
+    const topRow = document.createElement("div");
+    topRow.className = "intl-booth-row";
+    const botRow = document.createElement("div");
+    botRow.className = "intl-booth-row";
+
+    // Pre-allocate top and bottom arrays for each cluster [L, M, R]
+    const topClusters = Array.from({length: clusters}, () => []);
+    const botClusters = Array.from({length: clusters}, () => []);
+
+    const ids = [...boothIdsInBlock];
+    let idx = 0;
+
+    // Top row: fill R→M→L, each cluster reversed (R→L display)
+    // Cluster indices: 0=L, 1=M, 2=R
+    // Top order: R first (clusters-1 down to 0)
+    for (let cl = clusters - 1; cl >= 0; cl--) {
+        const chunk = [];
+        for (let i = 0; i < clusterSize && idx < ids.length; i++) chunk.push(ids[idx++]);
+        // Display R→L: reverse the chunk
+        topClusters[cl] = chunk.reverse();
+    }
+    // Bottom row: fill L→M→R, each cluster forward (L→R display)
+    for (let cl = 0; cl < clusters; cl++) {
+        const chunk = [];
+        for (let i = 0; i < clusterSize && idx < ids.length; i++) chunk.push(ids[idx++]);
+        botClusters[cl] = chunk;
+    }
+
+    // Render top row: L cluster | gap | M cluster | gap | R cluster
+    for (let cl = 0; cl < clusters; cl++) {
+        for (let i = 0; i < clusterSize; i++) {
+            const id = topClusters[cl][i];
+            topRow.appendChild(id != null ? makeBoothCell(id) : makeBoothCell(null));
+        }
+        if (cl < clusters - 1) topRow.appendChild(makeVGap());
+    }
+
+    // Render bottom row: L cluster | gap | M cluster | gap | R cluster
+    for (let cl = 0; cl < clusters; cl++) {
+        for (let i = 0; i < clusterSize; i++) {
+            const id = botClusters[cl][i];
+            botRow.appendChild(id != null ? makeBoothCell(id) : makeBoothCell(null));
+        }
+        if (cl < clusters - 1) botRow.appendChild(makeVGap());
+    }
+
+    blockEl.appendChild(topRow);
+    blockEl.appendChild(botRow);
+    return blockEl;
+}
+
 /* ── RENDER INTL SPATIAL FLOOR ── */
 function renderIntlFloor() {
     const building = document.createElement("div");
     building.className = "intl-building";
 
-    // Top loading dock bar
     const topBar = document.createElement("div");
     topBar.className = "intl-top-bar";
-    topBar.innerHTML = `<span>▲ LOADING DOCK &nbsp;/&nbsp; LOUNGE AREA (Hall 5 end)</span>`;
+    topBar.innerHTML = `<span>▲ LOADING DOCK &nbsp;/&nbsp; LOUNGE AREA</span>`;
     building.appendChild(topBar);
 
-    // All halls side by side
     const hallStrip = document.createElement("div");
     hallStrip.className = "intl-hall-strip";
 
-    ev.halls.forEach((hallDef, hIdx) => {
-        if (hallDef.name === "Ambulance") return; // skip ambulance from spatial view
+    const hallDefs = ev.halls.filter(h => h.name !== "Ambulance");
 
-        const cfg = INTL_HALL_CONFIGS[hallDef.name];
-        if (!cfg) return;
-
-        // Get sorted booth IDs for this hall
-        let boothIds = getHallBoothIds(hallDef);
-        boothIds.sort((a, b) => parseInt(a) - parseInt(b));
-
+    hallDefs.forEach((hallDef, hIdx) => {
         const hallEl = document.createElement("div");
         hallEl.className = "intl-hall";
 
-        // Hall label
         const label = document.createElement("div");
         label.className = "intl-hall-label";
         label.textContent = hallDef.name;
@@ -426,91 +481,22 @@ function renderIntlFloor() {
         const content = document.createElement("div");
         content.className = "intl-hall-content";
 
-        let idx = 0;
-        const { topStrip, clusters, clusterSize, blockRows } = cfg;
-        const totalClusterWidth = clusters * clusterSize; // e.g. 15 for 3×5
+        // Fetch all booth IDs sorted numerically for this hall
+        let boothIds = getHallBoothIds(hallDef);
+        boothIds.sort((a, b) => {
+            const na = parseInt(String(a).replace(/\D/g,""), 10);
+            const nb = parseInt(String(b).replace(/\D/g,""), 10);
+            return na - nb;
+        });
 
-        // ── TOP STRIP (single row, no grouping) ──────────────────
-        if (topStrip > 0) {
-            const stripRow = document.createElement("div");
-            stripRow.className = "intl-booth-row intl-top-strip";
-            for (let i = 0; i < topStrip && idx < boothIds.length; i++) {
-                stripRow.appendChild(makeBoothCell(boothIds[idx++]));
-            }
-            content.appendChild(stripRow);
-
-            // gangway after strip
-            content.appendChild(makeGangway());
-        }
-
-        // ── BLOCK ROWS: each block = 2 rows × (clusters of clusterSize) ──
-        /*
-         * Numbering pattern inside each block (from the image):
-         *
-         * The IDs are assigned sequentially BEFORE layout.
-         * But visually they display as:
-         *   Top row of cluster L: IDs going RIGHT→LEFT (highest first in that cluster)
-         *   Bottom row of cluster L: IDs going LEFT→RIGHT (lower values continuing)
-         *
-         * In practice: we just take the next `clusterSize*2` IDs for each cluster,
-         * split them: first half → top row (reversed), second half → bottom row (forward).
-         * Then we render L cluster, gap, M cluster, gap, R cluster.
-         */
-        for (let block = 0; block < blockRows && idx < boothIds.length; block++) {
-            const blockEl = document.createElement("div");
-            blockEl.className = "intl-block";
-
-            // Build top row and bottom row across all clusters
-            const topRowEl = document.createElement("div");
-            topRowEl.className = "intl-booth-row";
-            const botRowEl = document.createElement("div");
-            botRowEl.className = "intl-booth-row";
-
-            for (let cl = 0; cl < clusters; cl++) {
-                // Grab clusterSize*2 IDs for this cluster pair
-                const clusterIds = [];
-                for (let i = 0; i < clusterSize * 2 && idx < boothIds.length; i++) {
-                    clusterIds.push(boothIds[idx++]);
-                }
-                // Top half (first clusterSize): display RIGHT→LEFT
-                const topIds = clusterIds.slice(0, clusterSize).reverse();
-                // Bottom half (second clusterSize): display LEFT→RIGHT
-                const botIds = clusterIds.slice(clusterSize);
-
-                // Fill top row for this cluster
-                for (let i = 0; i < clusterSize; i++) {
-                    topRowEl.appendChild(topIds[i] != null ? makeBoothCell(topIds[i]) : makeBoothCell(null));
-                }
-                // Fill bottom row for this cluster
-                for (let i = 0; i < clusterSize; i++) {
-                    botRowEl.appendChild(botIds[i] != null ? makeBoothCell(botIds[i]) : makeBoothCell(null));
-                }
-
-                // Vertical gangway gap between clusters (not after last)
-                if (cl < clusters - 1) {
-                    const vgapTop = document.createElement("div");
-                    vgapTop.className = "intl-vgangway";
-                    topRowEl.appendChild(vgapTop);
-
-                    const vgapBot = document.createElement("div");
-                    vgapBot.className = "intl-vgangway";
-                    botRowEl.appendChild(vgapBot);
-                }
-            }
-
-            blockEl.appendChild(topRowEl);
-            blockEl.appendChild(botRowEl);
-            content.appendChild(blockEl);
-
-            // Horizontal gangway between blocks (not after last)
-            if (block < blockRows - 1 && idx < boothIds.length) {
-                content.appendChild(makeGangway());
-            }
+        if (hallDef.name === "Hall 5") {
+            renderHall5(content, boothIds);
+        } else {
+            renderStandardHall(content, boothIds, hallDef.name);
         }
 
         hallEl.appendChild(content);
 
-        // Entrance bar at bottom
         const entrance = document.createElement("div");
         entrance.className = "intl-entrance";
         entrance.innerHTML = `<span>▼ ENTRANCE · ${hallDef.name}</span>`;
@@ -518,15 +504,13 @@ function renderIntlFloor() {
 
         hallStrip.appendChild(hallEl);
 
-        // Vertical wall divider between halls
-        if (hIdx < ev.halls.length - 2) { // -2 because we skip Ambulance
+        if (hIdx < hallDefs.length - 1) {
             hallStrip.appendChild(makeHallDivider());
         }
     });
 
     building.appendChild(hallStrip);
 
-    // Bottom pre-function bar
     const botBar = document.createElement("div");
     botBar.className = "intl-bottom-bar";
     botBar.textContent = "PRE FUNCTION — ENTRANCE GATES  (Hall 5 · Hall 6 · Hall 7 · Hall 8 · Hall 9 · Hall 10)";
@@ -535,17 +519,141 @@ function renderIntlFloor() {
     floor.appendChild(building);
 }
 
-function makeGangway() {
-    const g = document.createElement("div");
-    g.className = "intl-gangway";
-    g.innerHTML = `<span class="intl-gangway-label">◄── GANGWAY ──►</span>`;
-    return g;
+/* ── HALL 5 SPECIAL RENDERER ──
+   Hall 5 has:
+   - Top strip: 5001–5006 (6 booths, left-aligned)
+   - 2 clusters × 6 booths per block row
+   - Block rows with snake numbering: R→L top, L→R bottom
+   - Special last partial block with merged booth 5035-A
+*/
+function renderHall5(content, boothIds) {
+    let idx = 0;
+    const clusters = 2;
+    const clusterSize = 6;
+
+    // Top strip: 5001–5006
+    const stripRow = document.createElement("div");
+    stripRow.className = "intl-booth-row intl-top-strip";
+    for (let i = 0; i < 6 && idx < boothIds.length; i++) {
+        stripRow.appendChild(makeBoothCell(boothIds[idx++]));
+    }
+    content.appendChild(stripRow);
+    content.appendChild(makeGangway());
+
+    // Block rows — each block = 2 clusters × 6 booths × 2 rows = 24 IDs
+    let blockNum = 0;
+    while (idx < boothIds.length) {
+        // Check if this is the last block (partial, has 5035-A)
+        const remaining = boothIds.slice(idx);
+        const hasSpecial = remaining.some(id => String(id).includes("-"));
+
+        if (hasSpecial) {
+            // Last special block: 5035-A + 5034, 5033, 5032, 5031 / 5036, 5037, 5038, 5039
+            renderHall5SpecialBlock(content, boothIds, idx);
+            break;
+        }
+
+        const chunk = boothIds.slice(idx, idx + clusters * clusterSize * 2);
+        idx += chunk.length;
+
+        if (blockNum > 0) content.appendChild(makeGangway());
+        content.appendChild(buildBlock(chunk, clusters, clusterSize));
+        blockNum++;
+
+        if (idx < boothIds.length && !boothIds.slice(idx).some(id => String(id).includes("-"))) {
+            // more normal blocks coming — add gangway before next
+        }
+    }
 }
 
-function makeHallDivider() {
-    const d = document.createElement("div");
-    d.className = "intl-hall-divider";
-    return d;
+/* Hall 5 last block: has merged booth 5035-A occupying 2 cells wide in top-left */
+function renderHall5SpecialBlock(content, boothIds, startIdx) {
+    // After gangway
+    content.appendChild(makeGangway());
+
+    // Find 5035-A and regular booths in this block
+    const blockIds = boothIds.slice(startIdx);
+    const specialId = blockIds.find(id => String(id).includes("-")); // "5035-A"
+    const normalIds = blockIds.filter(id => !String(id).includes("-")).sort((a,b) => parseInt(a)-parseInt(b));
+
+    // From image:
+    // Top row:    [5035-A (double)] | 5034 5033 5032 5031
+    // Bottom row: [empty (double)]  | 5036 5037 5038 5039
+    // Layout: left side has merged cell, right side has 4 booths per row
+
+    const blockEl = document.createElement("div");
+    blockEl.className = "intl-block";
+
+    const topRow = document.createElement("div");
+    topRow.className = "intl-booth-row";
+    const botRow = document.createElement("div");
+    botRow.className = "intl-booth-row";
+
+    // Merged booth (double width) on the left
+    if (specialId) {
+        const merged = createBooth(specialId);
+        merged.style.width = "116px"; // double booth width
+        merged.style.minWidth = "116px";
+        topRow.appendChild(merged);
+
+        // Empty below it
+        const emptyMerged = document.createElement("div");
+        emptyMerged.className = "intl-empty-cell";
+        emptyMerged.style.width = "116px";
+        emptyMerged.style.minWidth = "116px";
+        botRow.appendChild(emptyMerged);
+    }
+
+    // Vertical gap
+    topRow.appendChild(makeVGap());
+    botRow.appendChild(makeVGap());
+
+    // Top right: 5034, 5033, 5032, 5031 (reversed = R→L)
+    const topRight = normalIds.slice(0, 4).reverse();
+    topRight.forEach(id => topRow.appendChild(makeBoothCell(id)));
+
+    // Bottom right: 5036, 5037, 5038, 5039
+    const botRight = normalIds.slice(4, 8);
+    botRight.forEach(id => botRow.appendChild(makeBoothCell(id)));
+
+    blockEl.appendChild(topRow);
+    blockEl.appendChild(botRow);
+    content.appendChild(blockEl);
+}
+
+/* ── STANDARD HALL RENDERER ──
+   Halls 6–10:
+   - Hall 6 has a top strip of 8 booths
+   - All halls: 3 clusters × 5 booths per block row
+   - Snake numbering: R→M→L top, L→M→R bottom
+*/
+function renderStandardHall(content, boothIds, hallName) {
+    let idx = 0;
+    const clusters = 3;
+    const clusterSize = 5;
+
+    // Hall 6 top strip (8 booths: 6001–6008)
+    if (hallName === "Hall 6") {
+        const stripRow = document.createElement("div");
+        stripRow.className = "intl-booth-row intl-top-strip";
+        for (let i = 0; i < 8 && idx < boothIds.length; i++) {
+            stripRow.appendChild(makeBoothCell(boothIds[idx++]));
+        }
+        content.appendChild(stripRow);
+        content.appendChild(makeGangway());
+    }
+
+    // Block rows
+    let blockNum = 0;
+    while (idx < boothIds.length) {
+        const chunk = boothIds.slice(idx, idx + clusters * clusterSize * 2);
+        if (chunk.length === 0) break;
+        idx += chunk.length;
+
+        if (blockNum > 0) content.appendChild(makeGangway());
+        content.appendChild(buildBlock(chunk, clusters, clusterSize));
+        blockNum++;
+    }
 }
 
 /* ── CREATE BOOTH ── */
@@ -785,9 +893,6 @@ document.addEventListener("click", () => {
 
 /* ════════════════════════════════════════
    MULTI-FILTER
-   Status filters  (sold/booked/available) → OR within group
-   Tag filters (local/overseas/green/white/ambulance) → AND (booth must match ALL selected)
-   Status group AND tag group combine with AND between them
    ════════════════════════════════════════ */
 const STATUS_FILTERS = new Set(["sold", "booked", "available"]);
 const TAG_FILTERS    = new Set(["local", "overseas", "green", "white", "ambulance"]);
@@ -860,35 +965,29 @@ function applyFilter() {
     const noStatusFilter = activeFilters.size === 0;
     const noSqmFilter    = activeSqmFilters.size === 0;
 
-    // Status reset button
     const statusResetBtn = document.getElementById("statusResetBtn");
     if (statusResetBtn) statusResetBtn.classList.toggle("visible", !noStatusFilter);
 
-    // Sqm reset button
     const sqmResetBtn = document.getElementById("sqmResetBtn");
     if (sqmResetBtn) sqmResetBtn.classList.toggle("visible", !noSqmFilter);
 
-    // Status legend item states
     legendItems.forEach(li => {
         const f = li.dataset.filter;
         li.classList.toggle("legend-active", !noStatusFilter && activeFilters.has(f));
         li.classList.toggle("legend-dimmed",  !noStatusFilter && !activeFilters.has(f));
     });
 
-    // Sqm item states
     sqmItems.forEach(btn => {
         const s = Number(btn.dataset.sqm);
         btn.classList.toggle("legend-active", !noSqmFilter && activeSqmFilters.has(s));
         btn.classList.toggle("legend-dimmed",  !noSqmFilter && !activeSqmFilters.has(s));
     });
 
-    // Build lookup
     const lowerMap = {};
     Object.entries(allData).forEach(([key, val]) => {
         lowerMap[key.toLowerCase()] = val;
     });
 
-    // Separate active filters into status group and tag group
     const activeStatusFilters = [...activeFilters].filter(f => STATUS_FILTERS.has(f));
     const activeTagFilters    = [...activeFilters].filter(f => TAG_FILTERS.has(f));
 
@@ -898,21 +997,17 @@ function applyFilter() {
         const boothTags   = d?.tags   || [];
         const boothSqm    = Number(d?.sqm || 0);
 
-        // Status group: booth matches if no status filter selected OR its status is in selected statuses
         const passesStatus = activeStatusFilters.length === 0
             || activeStatusFilters.includes(boothStatus);
 
-        // Tag group: booth must have ALL selected tags (AND logic)
         const passesTags = activeTagFilters.length === 0
             || activeTagFilters.every(t => boothTags.includes(t));
 
-        // SQM: booth must match any selected sqm (OR within sqm group)
         const passesSqm = noSqmFilter || activeSqmFilters.has(boothSqm);
 
         b.classList.toggle("booth-dimmed", !(passesStatus && passesTags && passesSqm));
     });
 
-    // Show matched count when any filter is active
     const anyFilter = activeFilters.size > 0 || activeSqmFilters.size > 0;
     const matched   = [...booths].filter(b => !b.classList.contains("booth-dimmed")).length;
     const countEl   = document.getElementById("filterCount");
@@ -934,23 +1029,18 @@ function exportExcel() {
 
     const wb = XLSX.utils.book_new();
 
-    // Sheet 1: Booth List (all booths from allData)
     const boothRows = [["Booth ID", "Exhibitor", "Type", "Size (sqm)", "Status"]];
     Object.values(allData).forEach(d => {
         boothRows.push([d.boothid, d.exhibitor, d.type, d.sqm, d.status]);
     });
     const ws1 = XLSX.utils.aoa_to_sheet(boothRows);
-    // Color header row
-    const headerStyle = { font: { bold: true }, fill: { fgColor: { rgb: "0F172A" } } };
     XLSX.utils.book_append_sheet(wb, ws1, "Booth List");
 
-    // Sheet 2: Database Summary
     if (cachedTable1.length) {
         const ws2 = XLSX.utils.aoa_to_sheet(cachedTable1);
         XLSX.utils.book_append_sheet(wb, ws2, "Database Summary");
     }
 
-    // Sheet 3: Booth Type Summary
     if (cachedTable2.length) {
         const ws3 = XLSX.utils.aoa_to_sheet(cachedTable2);
         XLSX.utils.book_append_sheet(wb, ws3, "Booth Type Summary");
@@ -977,7 +1067,6 @@ function exportPDF() {
     const white = [255, 255, 255];
     const light = [240, 244, 248];
 
-    // ── Header bar
     doc.setFillColor(...navy);
     doc.rect(0, 0, pageW, 20, "F");
     doc.setTextColor(...white);
@@ -988,7 +1077,6 @@ function exportPDF() {
     doc.setFont("helvetica", "normal");
     doc.text(`${ev.venue} · ${ev.dates}`, pageW - 12, 13, { align: "right" });
 
-    // ── KPI summary row
     let sold=0, booked=0, avail=0, agent=0;
     Object.values(allData).forEach(d => {
         if(d.status==="sold")      sold++;
@@ -1019,7 +1107,6 @@ function exportPDF() {
         doc.text(k.label.toUpperCase(), x + 8, 39);
     });
 
-    // ── Booth list table
     let y = 48;
     doc.setFontSize(10);
     doc.setFont("helvetica", "bold");
@@ -1031,7 +1118,6 @@ function exportPDF() {
     const colW   = [28, 90, 50, 28, 28];
     const rowH   = 7;
 
-    // Table header
     doc.setFillColor(...navy);
     doc.rect(12, y, pageW - 24, rowH, "F");
     doc.setTextColor(...white);
@@ -1041,7 +1127,6 @@ function exportPDF() {
     cols.forEach((c, i) => { doc.text(c, cx, y + 5); cx += colW[i]; });
     y += rowH;
 
-    // Table rows
     const statusColors = {
         sold:      [239,68,68],
         booked:    [245,158,11],
@@ -1055,7 +1140,6 @@ function exportPDF() {
         if (y > doc.internal.pageSize.getHeight() - 12) {
             doc.addPage();
             y = 12;
-            // Re-draw header on new page
             doc.setFillColor(...navy);
             doc.rect(12, y, pageW - 24, rowH, "F");
             doc.setTextColor(...white);
@@ -1077,12 +1161,10 @@ function exportPDF() {
         const cells = [d.boothid, d.exhibitor, d.type, String(d.sqm), ""];
         cells.forEach((cell, i) => {
             const txt = String(cell || "");
-            // Truncate if too wide
             const maxChars = Math.floor(colW[i] / 1.8);
             doc.text(txt.length > maxChars ? txt.slice(0, maxChars) + "…" : txt, cx, y + 5);
             cx += colW[i];
         });
-        // Status badge color dot
         const sc = statusColors[d.status] || navy;
         doc.setFillColor(...sc);
         doc.circle(cx - colW[4] + 3, y + 3.5, 1.8, "F");
@@ -1093,7 +1175,6 @@ function exportPDF() {
         rowIdx++;
     });
 
-    // ── Footer
     const pageCount = doc.internal.getNumberOfPages();
     for (let p = 1; p <= pageCount; p++) {
         doc.setPage(p);
